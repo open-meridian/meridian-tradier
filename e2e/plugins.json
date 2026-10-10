@@ -1,4 +1,4 @@
 [
   {"instance": "tradier", "image": "tradier:local", "roles": ["dgm"]},
-  {"instance": "reader", "image": "tradier:local", "roles": ["custody", "reporting"]}
+  {"instance": "reader", "image": "tradier:local", "roles": ["custody", "reporting", "signal"]}
 ]

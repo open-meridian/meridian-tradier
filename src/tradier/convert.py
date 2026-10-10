@@ -20,8 +20,16 @@ instrument and venue before anything is recorded.
   code Tradier prints (`exch`, Tradier's own letters, resolved as Tradier's
   code); its `bid` and `ask` are the consolidated best bid and offer, no
   venue. Tradier states `bidsize` and `asksize` in hundreds of shares; a
-  price carries no size, so the sizes are kept in the raw record until the
-  lake's quotes (contract v19) carry them, converted to shares.
+  price carries no size, and a quote (contract v19) carries them converted
+  to shares.
+- **Trades and quotes streamed** (contract v19): a time and sale
+  (`timesale`) is a trade -- the exchange it printed on, its price and
+  size in shares, Tradier's sequence number (`seq`), its session and flag,
+  and whether it cancels or corrects one; a `quote` the consolidated best
+  bid and offer, sizes in hundreds, to shares. The stream sends some
+  numbers as text (`"price": "281.85"`) and some as numbers; both are read
+  exactly, never through a float. Its `trade`, `tradex` and `summary`
+  events repeat what a time and sale says and are not converted.
 - **Tradier's shapes:** a list of one is the one object, and none is `null`;
   both are read as lists here.
 - **Exact.** A value that is not a number, or past the contract's Decimal (18
@@ -214,6 +222,9 @@ class Quoted:
 
 
 def _ms(value: object) -> int | None:
+    """Epoch milliseconds, as a number or its text, in nanoseconds."""
+    if isinstance(value, Decimal) and value == value.to_integral_value():
+        value = int(value)
     return value * 1_000_000 if isinstance(value, int) and value > 0 else None
 
 
@@ -243,3 +254,154 @@ def quotes(fetched: Fetched) -> Iterator[Quoted]:
                 raw_key=f"{fetched.raw_key}#{symbol}/{kind}",
                 unconverted=tuple(values.unconverted),
             )
+
+
+# ── Trades and quotes (contract v19) ────────────────────────────────────────
+
+#: A number Tradier's stream sends as text.
+NUMBER_TEXT = re.compile(r"-?\d+(?:\.\d+)?")
+#: Tradier's stream's sizes of a quote: hundreds of shares.
+ROUND_LOT = Decimal(100)
+
+
+def number(value: object) -> object:
+    """A number Tradier stated as a number or as its text, as a Decimal from
+    its own text; anything else as it is (which then does not convert)."""
+    if isinstance(value, str) and NUMBER_TEXT.fullmatch(value.strip()):
+        return Decimal(value.strip())
+    return value
+
+
+@dataclass(frozen=True)
+class SourceTrade:
+    """One of Tradier's time and sales prints: the exchange it printed on
+    (`exch`, Tradier's code), its price and size, Tradier's sequence number
+    for it (`seq`), its session (`pre`, `regular` or `post`) and flag, and
+    whether it cancels a print (`cancel`) or corrects one (`correction`)."""
+
+    symbol: str
+    at_ns: int
+    venue_code: str
+    sequence: int
+    price: Decimal | None
+    quantity: Decimal | None
+    flag: str
+    session: str
+    correction: bool
+    raw_key: str
+    cancelled: bool = False
+    unconverted: tuple[AsReported, ...] = ()
+
+    @property
+    def row_key(self) -> str:
+        """The print's identity: the listing, the New York day and Tradier's
+        sequence number, which a cancel of it repeats."""
+        day = new_york_date(self.at_ns).isoformat()
+        return f"{self.symbol}:t:{day}:{self.sequence}"
+
+
+@dataclass(frozen=True)
+class SourceQuote:
+    """The consolidated best bid and offer as Tradier states it: a side with
+    no price is empty; sizes in shares, from Tradier's hundreds."""
+
+    symbol: str
+    at_ns: int
+    bid: Decimal | None
+    ask: Decimal | None
+    bid_size: Decimal | None
+    ask_size: Decimal | None
+    raw_key: str
+    unconverted: tuple[AsReported, ...] = ()
+
+    @property
+    def row_key(self) -> str:
+        return f"{self.symbol}:q:{self.at_ns}"
+
+
+def timesale(message: Any, raw_key: str) -> SourceTrade | None:
+    """A trade from a time and sale; None where its listing, time or
+    sequence is not one."""
+    symbol = spelled(str(message.get("symbol") or ""))
+    at = _ms(number(message.get("date")) if message.get("date") is not None else None)
+    sequence = number(message.get("seq"))
+    if symbol is None or at is None or not isinstance(sequence, int | Decimal):
+        return None
+    values = _Values("timesale")
+    return SourceTrade(
+        symbol=symbol,
+        at_ns=at,
+        venue_code=str(message.get("exch") or ""),
+        sequence=int(sequence),
+        price=values.number("last", number(message.get("last")), positive=True),
+        quantity=values.number("size", number(message.get("size")), positive=True),
+        flag=str(message.get("flag") or ""),
+        session=str(message.get("session") or ""),
+        correction=message.get("correction") is True,
+        raw_key=raw_key,
+        cancelled=message.get("cancel") is True,
+        unconverted=tuple(values.unconverted),
+    )
+
+
+def _side(
+    values: _Values, price: object, size: object, price_name: str, size_name: str
+) -> tuple[Decimal | None, Decimal | None]:
+    stated = number(price)
+    if stated is None or exact(stated) == 0:
+        return None, None
+    amount = values.number(price_name, stated, positive=True)
+    lots = number(size)
+    shares = values.number(size_name, lots, positive=True) if exact(lots) != 0 else None
+    return amount, None if shares is None else shares * ROUND_LOT
+
+
+def stream_quote(message: Any, raw_key: str) -> SourceQuote | None:
+    """A quote from the stream's `quote` event: valid from the later of its
+    sides' times."""
+    symbol = spelled(str(message.get("symbol") or ""))
+    times = [
+        _ms(number(message.get(k))) for k in ("biddate", "askdate") if message.get(k) is not None
+    ]
+    held = [t for t in times if t is not None]
+    if symbol is None or not held:
+        return None
+    values = _Values("quote")
+    bid, bid_size = _side(values, message.get("bid"), message.get("bidsz"), "bid", "bidsz")
+    ask, ask_size = _side(values, message.get("ask"), message.get("asksz"), "ask", "asksz")
+    return SourceQuote(
+        symbol, max(held), bid, ask, bid_size, ask_size, raw_key, tuple(values.unconverted)
+    )
+
+
+def quote_rows(fetched: Fetched) -> Iterator[SourceQuote]:
+    """Each listing's quote of `/markets/quotes`, as a quote."""
+    held = fetched.value.get("quotes") or {}
+    for item in as_list(held.get("quote") if isinstance(held, dict) else None):
+        symbol = spelled(str(item.get("symbol") or ""))
+        times = [_ms(item.get(k)) for k in ("bid_date", "ask_date")]
+        stamped = [t for t in times if t is not None]
+        if symbol is None or not stamped:
+            continue
+        values = _Values("quotes")
+        bid, bid_size = _side(values, item.get("bid"), item.get("bidsize"), "bid", "bidsize")
+        ask, ask_size = _side(values, item.get("ask"), item.get("asksize"), "ask", "asksize")
+        key = f"{fetched.raw_key}#{symbol}/quote"
+        yield SourceQuote(
+            symbol, max(stamped), bid, ask, bid_size, ask_size, key, tuple(values.unconverted)
+        )
+
+
+def streamed(message: Any, raw_key: str) -> list[SourceTrade | SourceQuote]:
+    """What one of Tradier's stream events states: a time and sale, or a
+    quote; nothing for any other."""
+    if not isinstance(message, dict):
+        return []
+    kind = message.get("type")
+    if kind == "timesale":
+        trade = timesale(message, raw_key)
+        return [trade] if trade is not None else []
+    if kind == "quote":
+        quote = stream_quote(message, raw_key)
+        return [quote] if quote is not None else []
+    return []

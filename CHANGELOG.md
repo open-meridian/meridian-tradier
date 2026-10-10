@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.2.0 (unreleased)
+
+- On open-meridian 0.23.0 (contract 19): the lake's trades and quotes.
+- `trades`, a new dataset: each of Tradier's time and sales with the
+  platform's trade attributes (the session converted; a flag or a
+  correction kept as reported, Tradier documenting none), its sequence
+  number, and no aggressor, which Tradier never states; a cancel the
+  trade's next version. Streamed for the listings under a standing want;
+  kept two days by default.
+- `live` gains quotes: the consolidated best bid and offer, sizes in shares
+  from Tradier's hundreds, one side empty where Tradier sends none, streamed
+  at most once a second a listing, or read for a reader's want.
+- Tradier's stream over WebSocket (the standard library's own client), a
+  session made with the token and kept out of every raw record, with
+  reconnect and subscriptions made again from the standing wants.
+- Fixed, as in meridian-alpaca: a second record of one listing is recorded
+  under its own row key (the key names the record), not under the first's,
+  which the lake versioned as a restatement; a day read again unchanged
+  keeps its raw record. Rows recorded by 0.1.0 keep their keys.
+- The SDK's suite with its 1b cases: five not presented, each with why.
+- Connection shows the stream; Datasets searches and pages the standing
+  wants (kit 0.11.0). `make live` listens to the stream for twenty seconds.
+
 ## 0.1.0 (unreleased)
 
 - A `dgm` on open-meridian 0.22.0 (contract 18): the catalogue's `daily`

@@ -6,9 +6,11 @@ The token is read from standard input, one line, which `make live` fills from
 a prompt that does not echo; it is never an argument, an environment variable
 or a file, and is never printed. It asks Tradier whether the token answers,
 reads a week of SPY's and BRK/B's daily history and their quotes, converts
-them as the plugin does, and prints what it found: booleans, counts and
-converted values, never the token. It then checks that no raw record holds
-the token.
+them as the plugin does, listens to Tradier's stream for them for up to
+twenty seconds (not the sandbox's, which does not stream), and prints what it
+found: booleans, counts and converted values, and the flags and sessions its
+time and sales carried, never the token or a session's ID. It then checks that
+no raw record holds the token.
 
 What Tradier answered is kept under `recordings/` (git-ignored: real
 responses are the account holder's, for their personal use), each response
@@ -18,6 +20,7 @@ which `make e2e-recorded RECORDED=recordings/<when>` replays through the e2e.
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import json
 import sys
@@ -27,12 +30,54 @@ from pathlib import Path
 from typing import Any
 
 from . import convert
-from .convert import as_list, tradier_symbol
+from .convert import SourceQuote, SourceTrade, as_list, tradier_symbol
 from .raw import RawStore
 from .settings import Credentials
+from .stream import TradierFeed
 from .vendor import API, SANDBOX, Tradier, VendorError
 
 SYMBOLS = ("SPY", "BRK.B")
+#: How long the stream is listened to, at most, and how many events.
+STREAM_SECONDS, STREAM_EVENTS = 20.0, 200
+
+
+async def listen(tradier: Tradier, store: RawStore) -> dict[str, Any]:
+    """A short session of Tradier's stream for SYMBOLS: what it stated,
+    counted, and the flags and sessions its time and sales carried (which
+    the plugin keeps as reported until Tradier says what its flags mean)."""
+
+    async def session() -> str:
+        return await asyncio.to_thread(tradier.session)
+
+    feed = TradierFeed(session, store)
+    heard: dict[str, Any] = {"connected": False, "trades": 0, "cancels": 0, "quotes": 0}
+    flags: set[str] = set()
+    sessions: set[str] = set()
+    try:
+        await feed.open()
+        heard["connected"] = True
+        await feed.subscribe(list(SYMBOLS))
+        until = time.monotonic() + STREAM_SECONDS
+        events = 0
+        while events < STREAM_EVENTS and time.monotonic() < until:
+            try:
+                stated = await asyncio.wait_for(feed.receive(), until - time.monotonic())
+            except TimeoutError:
+                break
+            events += len(stated)
+            for each in stated:
+                if isinstance(each, SourceTrade):
+                    heard["cancels" if each.cancelled else "trades"] += 1
+                    flags.add(each.flag)
+                    sessions.add(each.session)
+                elif isinstance(each, SourceQuote):
+                    heard["quotes"] += 1
+    except Exception as failed:  # noqa: BLE001 - said, for the account holder
+        heard["error"] = f"{type(failed).__name__}: {failed}"[:200]
+    finally:
+        await feed.close()
+    heard["flags"], heard["sessions"] = sorted(flags), sorted(sessions)
+    return heard
 
 
 def _text(value: Any) -> Any:
@@ -91,8 +136,11 @@ def main(argv: list[str]) -> int:
     said["unconverted"] = sum(len(b.unconverted) for b in bars) + sum(
         len(q.unconverted) for q in live
     )
+    if not sandbox:
+        # Tradier's sandbox does not stream.
+        said["stream"] = asyncio.run(listen(tradier, RawStore(out / "raw")))
     said["calls"], said["rate_limited"] = tradier.usage.calls, tradier.usage.rate_limited
-    kept = "".join(p.read_text() for p in (out / "raw").rglob("*.json"))
+    kept = "".join(p.read_text() for p in (out / "raw").rglob("*.json*"))
     said["key_in_raw_records"] = any(secret in kept for secret in token.secrets())
     exchange = {
         "_about": "Recorded from Tradier by `make live`, for the account holder's personal use.",

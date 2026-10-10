@@ -1,5 +1,5 @@
 """The Tradier plugin: Tradier's US equity and ETF market data in an Open
-Meridian deployment's lake, as a `dgm` (contract v18;
+Meridian deployment's lake, as a `dgm` (contract v19;
 plans/the-lake-prices-the-book, the retail pair).
 
 It connects to the sidecar it is launched beside, declaring its catalogue,
@@ -9,7 +9,9 @@ token (or, in synthetic mode, the built-in exchange) and asks whether Tradier
 answers it; then it hears what the lake wants of it and records against
 each want or declines it per subject (lake.py), and keeps its timetable:
 standing wants kept current, days still forming read again, a final close
-pushed.
+pushed. While any standing want stands, it streams Tradier's time and sales
+and quotes for the listings wanted (stream.py), reconnecting with a new
+session when the stream breaks.
 
 It holds nothing it cannot lose: what each subject's symbol is, and every
 raw response, are in the storage the deployment grants it (decisions/028);
@@ -39,7 +41,8 @@ from .page import TITLE, State, pages, serve
 from .raw import RawStore, storage_root
 from .settings import DECLARED, Config, config_from
 from .source import TradierSource
-from .synthetic import SyntheticTransport, exchange
+from .stream import Feed, FeedError, Refused, Streamer, TradierFeed
+from .synthetic import SyntheticFeed, SyntheticTransport, exchange
 from .vendor import NoKey, Tradier, VendorError, urllib_transport
 
 log = logging.getLogger("tradier")
@@ -58,6 +61,28 @@ def source_for(config: Config, store: RawStore) -> tuple[Tradier | None, Tradier
         return None, None
     tradier = Tradier(store, config.credentials, transport=urllib_transport)
     return tradier, TradierSource(tradier)
+
+
+def feed_for(state: State, store: RawStore) -> Feed | None:
+    """The stream the settings give: synthetic, Tradier's with the token, or
+    none while there is no token."""
+    if state.config.synthetic:
+        return SyntheticFeed(store)
+    tradier = state.tradier
+    if state.config.credentials is None or tradier is None:
+        return None
+
+    async def session() -> str:
+        try:
+            return await asyncio.to_thread(tradier.session)
+        except NoKey as missing:
+            raise Refused(str(missing)) from None
+        except VendorError as refused:
+            if refused.status in (401, 403):
+                raise Refused(f"{refused.status} {refused.detail}") from None
+            raise FeedError(f"{refused.status} {refused.detail}") from None
+
+    return TradierFeed(session, store)
 
 
 async def health(plugin: meridian.Plugin, state: State) -> None:
@@ -95,6 +120,10 @@ async def watch_settings(
                 await state.lake.seed(sorted(spelled(s) or s for s in exchange()["history"]))
         configured.set()
         await health(plugin, state)
+        if state.lake is not None:
+            state.lake.restream()
+        if state.streamer is not None:
+            state.streamer.restart()
 
 
 async def timetable(lake: Lake) -> None:
@@ -144,6 +173,8 @@ async def run() -> None:
         )
         lake = Lake(plugin, None, Products(granted / "products.json" if granted else None))
         state = State(lake=lake)
+        streamer = Streamer(lambda: feed_for(state, store), lake.heard, lake.flush)
+        lake.streamer = state.streamer = streamer
         configured = asyncio.Event()
         page = serve(plugin, state, port)
         tasks = [
@@ -163,6 +194,7 @@ async def run() -> None:
             )
         )
         tasks.append(asyncio.create_task(again(lambda: timetable(lake), "the timetable")))
+        tasks.append(asyncio.create_task(again(streamer.run, "the stream")))
         log.info("serving its pages on 127.0.0.1:%d, hearing the lake's wants", port)
         await stopped.wait()
         log.info("stopping")

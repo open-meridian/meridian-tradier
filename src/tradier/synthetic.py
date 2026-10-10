@@ -11,18 +11,25 @@ side empty, sizes in hundreds. Its numbers are text in the file and go out
 as JSON numbers, exactly as written, as Tradier sends them; and, as Tradier
 does, a list of one goes out as the one object, none as `null`, and a symbol
 it does not know under `unmatched_symbols`.
+
+Its stream (`SyntheticFeed`) replays the exchange's `stream` events, as
+Tradier's WebSocket sends them: some numbers as numbers, some as text.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
+import time
 import urllib.parse
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from decimal import Decimal
 from importlib import resources
 from pathlib import Path
 from typing import Any
 
+from .raw import RawStore, StreamLog
 from .vendor import Response
 
 #: The fields Tradier sends as text, never as numbers.
@@ -98,3 +105,81 @@ class SyntheticTransport:
     @staticmethod
     def _ok(body: Any) -> Response:
         return Response(200, {"content-type": "application/json"}, dumps(body).encode())
+
+
+#: The fields Tradier's stream sends as numbers; the rest of a time and
+#: sale's are text, and a quote's dates are text.
+STREAM_NUMBERS = frozenset({"seq", "bid", "ask", "bidsz", "asksz"})
+
+
+class SyntheticFeed:
+    """stream.Feed on the built-in exchange's `stream`: no network, no token.
+    Each cycle replays its events for the listings subscribed, stamped from
+    the moment the cycle began, with sequence numbers moved on by the cycle:
+    a regular print, one with a flag, a print and its cancel, one after the
+    close, a quote two-sided and one with no offer, and a `trade` event,
+    which the plugin does not convert."""
+
+    name = "synthetic"
+
+    def __init__(
+        self,
+        store: RawStore,
+        held: Mapping[str, Any] | None = None,
+        clock_ns: Callable[[], int] = time.time_ns,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    ) -> None:
+        from .convert import spelled
+
+        self.spelled = spelled
+        self.held = held if held is not None else exchange()
+        self.store, self.clock_ns, self.sleep = store, clock_ns, sleep
+        script = self.held.get("stream", {})
+        self.every = float(script.get("every_seconds", "2"))
+        self.events: list[dict[str, Any]] = list(script.get("events", []))
+        self.subscribed: set[str] = set()
+        self.cycle = 0
+        self.log: StreamLog | None = None
+
+    async def open(self) -> None:
+        self.log = StreamLog(self.store, f"stream/synthetic/{self.clock_ns()}")
+
+    async def subscribe(self, symbols: Sequence[str]) -> None:
+        self.subscribed = set(symbols)
+
+    async def receive(self) -> list[Any]:
+        from . import convert
+
+        if self.cycle:
+            await self.sleep(self.every)
+        self.cycle += 1
+        began_ms = self.clock_ns() // 1_000_000
+        out: list[Any] = []
+        for event in self.events:
+            if self.spelled(str(event.get("symbol"))) not in self.subscribed:
+                continue
+            said: dict[str, Any] = {k: v for k, v in event.items() if k != "at_ms"}
+            at = str(began_ms + int(event.get("at_ms", "0")))
+            if said["type"] == "quote":
+                said["biddate"] = said["askdate"] = at
+            else:
+                said["date"] = at
+            if "seq" in said:
+                said["seq"] = str(int(said["seq"]) + self.cycle * 1000)
+            text = (
+                "{"
+                + ",".join(
+                    f"{json.dumps(k)}:{v if k in STREAM_NUMBERS else json.dumps(v)}"
+                    for k, v in said.items()
+                )
+                + "}"
+            )
+            message = json.loads(text, parse_float=Decimal)
+            key = self.log.keep({"message": said}) if self.log is not None else ""
+            out.extend(convert.streamed(message, key))
+        return out
+
+    async def close(self) -> None:
+        if self.log is not None:
+            self.log.close()
+            self.log = None

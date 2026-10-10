@@ -1,13 +1,13 @@
 # tradier
 
 Tradier's US equity and ETF market data in an Open Meridian deployment's
-lake, as a `dgm` (contract v18). What is particular to this plugin first;
+lake, as a `dgm` (contract v19). What is particular to this plugin first;
 the rest of this file is the SDK template's guidance, which holds for it
 as for every plugin.
 
 ## This plugin
 
-- `src/tradier/declaration.py`: the catalogue (`daily` and `live`), the
+- `src/tradier/declaration.py`: the catalogue (`daily`, `live` and `trades`), the
   settings (the access token, secret; `synthetic`, a developer's) and the
   storage. A dataset's key, modes, day and default terms change only with a
   new version, and the deployment admin sees them before approving it.
@@ -23,6 +23,11 @@ as for every plugin.
   answered or declined per subject, standing wants kept current, forming
   days restated under one row key, final closes pushed, subjects and venues
   resolved (W3.1, W3.2, W3.14, W3.15).
+- `src/tradier/stream.py`, `ws.py` and `conditions.py`: Tradier's stream over
+  WebSocket (a session made by REST; the standard library's client), its
+  reconnect, and what of a time and sale converts to the platform's trade
+  attributes (the session; a flag is kept as reported). What is streamed
+  is what the standing wants ask (lake.py), never kept here.
 - `src/tradier/page.py`: Connection and Datasets, under Manage, each a read
   tool (`read_connection`, `read_datasets`). No page shows a price: prices
   are the reading roles', under their entitlement.

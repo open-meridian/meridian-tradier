@@ -2,15 +2,18 @@
 
 REST at api.tradier.com/v1 (or its sandbox, sandbox.tradier.com/v1, delayed
 15 minutes, for a developer's own check): `/markets/history` (one symbol's
-daily bars over a range) and `/markets/quotes` (many symbols' last trade and
-best bid and ask). Market data for a Tradier Brokerage account holder is real
-time and consolidated from every exchange. Nothing here streams: Tradier's
-streaming session waits for the lake's trades and quotes (contract v19).
+daily bars over a range), `/markets/quotes` (many symbols' last trade and
+best bid and ask) and, to stream, `/markets/events/session` (a session for
+the WebSocket at `STREAM`, which stream.py speaks). Market data for a
+Tradier Brokerage account holder is real time and consolidated from every
+exchange.
 
 **The token.** Tradier's bearer token, from `settings.Credentials`, added to
 the request and to nothing else: a raw record keeps the request's other
 headers, and as a last guard any text holding the token is redacted before
-it is kept. Without a token, nothing is asked.
+it is kept. Without a token, nothing is asked. A streaming session's ID,
+which lets its holder stream for five minutes, is redacted from the raw
+record of the response that gave it.
 
 **Rate limits, honoured.** Tradier allows market data 120 requests a minute
 per token; this client spends at most half of it, 60 a minute, one at a
@@ -27,6 +30,7 @@ Decimals from their own text, never a float.
 from __future__ import annotations
 
 import json
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -41,7 +45,9 @@ from .settings import Credentials
 
 API = "https://api.tradier.com/v1"
 SANDBOX = "https://sandbox.tradier.com/v1"
-USER_AGENT = "meridian-tradier/0.1.0 (+https://open-meridian.dev)"
+USER_AGENT = "meridian-tradier/0.2.0 (+https://open-meridian.dev)"
+#: Tradier's market data over WebSocket, for a session made by REST.
+STREAM = "wss://ws.tradier.com/v1/markets/events"
 NS = 1_000_000_000
 
 #: Tradier allows market data 120 requests a minute; this spends half of it.
@@ -70,11 +76,26 @@ class Response:
 
 
 Transport = Callable[[str, Mapping[str, str]], Response]
+Poster = Callable[[str, Mapping[str, str]], Response]
 
 
 def urllib_transport(url: str, headers: Mapping[str, str]) -> Response:
     """One GET over HTTPS, with the standard library."""
     request = urllib.request.Request(url, headers=dict(headers))
+    try:
+        with urllib.request.urlopen(request, timeout=15) as answer:
+            return Response(
+                answer.status, {k.lower(): v for k, v in answer.headers.items()}, answer.read()
+            )
+    except urllib.error.HTTPError as answer:
+        return Response(
+            answer.code, {k.lower(): v for k, v in answer.headers.items()}, answer.read()
+        )
+
+
+def urllib_post(url: str, headers: Mapping[str, str]) -> Response:
+    """One POST with no body over HTTPS, with the standard library."""
+    request = urllib.request.Request(url, data=b"", headers=dict(headers), method="POST")
     try:
         with urllib.request.urlopen(request, timeout=15) as answer:
             return Response(
@@ -175,8 +196,10 @@ class Tradier:
         retries: int = 3,
         keyless: bool = False,
         base: str = API,
+        poster: Poster = urllib_post,
     ) -> None:
         self.store, self.credentials, self.transport = store, credentials, transport
+        self.poster = poster
         self.limiter = limiter or RateLimiter()
         self.clock_ns, self.sleep, self.retries = clock_ns, sleep, retries
         # Synthetic mode asks its built-in exchange with no token.
@@ -205,11 +228,20 @@ class Tradier:
             return float(min(60, max(1, int(expiry) // 1000 - self.clock_ns() // NS)))
         return 2.0**attempt
 
-    def get(self, call: str, key: str, path: str, params: Mapping[str, str]) -> Fetched:
-        """One call, kept as a raw record before anything reads it."""
+    def get(
+        self,
+        call: str,
+        key: str,
+        path: str,
+        params: Mapping[str, str],
+        method: str = "GET",
+        hide: Callable[[str], str] = lambda text: text,
+    ) -> Fetched:
+        """One call, kept as a raw record before anything reads it; `hide`
+        takes out of the kept body what must not be kept."""
         if self.credentials is None and not self.keyless:
             raise NoKey(f"{call}: no Tradier token is set, so nothing was asked")
-        url = f"{self.base}{path}?{urllib.parse.urlencode(params)}"
+        url = f"{self.base}{path}" + (f"?{urllib.parse.urlencode(params)}" if params else "")
         kept_headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
         headers = dict(kept_headers)
         if self.credentials is not None:
@@ -218,16 +250,17 @@ class Tradier:
             self.limiter.acquire()
             self.usage.calls += 1
             self.usage.by_call[call] = self.usage.by_call.get(call, 0) + 1
-            answer = self.transport(url, headers)
+            answer = (self.poster if method == "POST" else self.transport)(url, headers)
             received = self.clock_ns()
             self.usage.last_call_at_ns, self.usage.last_status = received, answer.status
-            text = self._redacted(answer.body.decode("utf-8", errors="replace"))
+            said = self._redacted(answer.body.decode("utf-8", errors="replace"))
+            text = hide(said)
             raw_key = self._keep(
                 key,
                 {
                     "venue": "tradier",
                     "call": call,
-                    "request": {"method": "GET", "url": url, "headers": kept_headers},
+                    "request": {"method": method, "url": url, "headers": kept_headers},
                     "received_at_ns": received,
                     "status": answer.status,
                     "headers": {
@@ -247,7 +280,7 @@ class Tradier:
                 self.usage.last_error = f"{call}: {answer.status} {failed.detail}"
                 raise failed
             try:
-                value = parse(text)
+                value = parse(said)
             except json.JSONDecodeError as broken:
                 self.usage.last_error = f"{call}: not JSON"
                 raise VendorError(call, answer.status, f"not JSON: {broken}", raw_key) from None
@@ -264,6 +297,20 @@ class Tradier:
     def quotes(self, symbols: Sequence[str]) -> Fetched:
         params = {"symbols": ",".join(symbols), "greeks": "false"}
         return self.get("quotes", "quotes", "/markets/quotes", params)
+
+    def session(self) -> str:
+        """A streaming session's ID, valid five minutes until a stream
+        connects with it; kept out of the raw record."""
+
+        def hide(text: str) -> str:
+            return re.sub(r'("sessionid"\s*:\s*")[^"]*(")', r"\1" + REDACTED + r"\2", text)
+
+        fetched = self.get("session", "session", "/markets/events/session", {}, "POST", hide)
+        stream = fetched.value.get("stream") if isinstance(fetched.value, dict) else None
+        session = stream.get("sessionid") if isinstance(stream, dict) else None
+        if not session:
+            raise VendorError("session", 200, "no session ID in Tradier's answer", fetched.raw_key)
+        return str(session)
 
     def entitlements(self, symbol: str = PROBE_SYMBOL) -> Entitlements:
         """Ask once whether Tradier answers the token, with a quote. Raises

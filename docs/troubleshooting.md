@@ -9,3 +9,6 @@
 | Datasets: **unconverted** grows | Tradier sent a value the contract cannot hold exactly | Nothing is recorded for it; the raw response is kept |
 | A last price with **no venue** | Your deployment does not hold the exchange Tradier named yet | It is reported to the platform, and named once the venue is held |
 | **Last error** names a 429 | Tradier's rate limit was hit and waited out | Nothing; the plugin spends half the limit |
+| Stream: **Refused** | Tradier refused the token when the plugin asked for a streaming session | Check the token; the sandbox's does not stream |
+| Stream: **reconnects** grow | The stream dropped; each reconnect is a gap not filled | Nothing to do; if it is constant, check the network |
+| Datasets: trades **unconverted** grows | Tradier sent a flag the plugin does not convert (Tradier documents none) | Those trades' eligibilities are not known; the flag is kept as reported |

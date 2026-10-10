@@ -1,11 +1,13 @@
 """The plugin's pages, under Manage alone: Connection and Datasets, each a read
 tool on the deployment's MCP surface answering what the page shows
-(`read_connection`, `read_datasets`; the lake plan's "Every new page's
-tools"). A `dgm` shows no market data: prices are the reading roles' to
-read, under their entitlement, and an admin page shows no account's data.
+(`read_connection`, with the stream's session, and `read_datasets`; the lake
+plan's "Every new page's tools"). A `dgm` shows no market data: prices,
+trades and quotes are the reading roles' to read, under their entitlement,
+and an admin page shows no account's data.
 
-Each page fits one screen at 1440x900 and 390x844: one-line rows, the
-standing wants cut to the first few with the rest counted.
+Each page fits one screen at 1440x900 and 390x844: one-line rows, and the
+standing wants, which grow, searched and paged (the kit's `search` on an
+`om-pager`, since kit 0.11.0); without the kit, every row is there.
 """
 
 from __future__ import annotations
@@ -20,10 +22,18 @@ from meridian.plugin.v1 import operations_pb2 as ops
 
 from .convert import NEW_YORK
 from .declaration import CATALOGUE
-from .lake import DAILY, LIVE, Lake
-from .records import ConnectionRead, DatasetRead, DatasetsRead, FeedRead, StandingRead
+from .lake import DAILY, LIVE, PRICE, QUOTE, TRADES, Lake
+from .records import (
+    ConnectionRead,
+    DatasetRead,
+    DatasetsRead,
+    FeedRead,
+    SessionRead,
+    StandingRead,
+)
 from .settings import Config
 from .source import TradierSource
+from .stream import Streamer
 from .vendor import LIMIT_PER_MINUTE, NS, Tradier, Usage
 
 TITLE = "Tradier"
@@ -32,10 +42,10 @@ DATASETS = "/datasets"
 #: Tradier's own limit on market data per token, of which the client spends
 #: half.
 VENDOR_LIMIT_PER_MINUTE = 120
-#: How many standing wants the page lists before counting the rest.
-STANDING_SHOWN = 6
+#: The kit the pages are built on: 0.11.0's search beside the pager.
+KIT = "0.11.0"
 
-pages = meridian.Pages(TITLE, templates=Path(__file__).parent / "templates")
+pages = meridian.Pages(TITLE, templates=Path(__file__).parent / "templates", kit=KIT)
 
 
 @dataclass
@@ -46,6 +56,7 @@ class State:
     lake: Lake | None = None
     source: TradierSource | None = None
     tradier: Tradier | None = None
+    streamer: Streamer | None = None
 
 
 _state = State()
@@ -108,8 +119,30 @@ def connection_read(state: State) -> ConnectionRead:
         last_call_at=_when(usage.last_call_at_ns),
         last_status=usage.last_status,
         last_error=usage.last_error or (state.lake.last_error if state.lake else ""),
-        sessions=[],
+        sessions=[session_read(state)] if state.streamer is not None else [],
     )
+
+
+def session_read(state: State) -> SessionRead:
+    assert state.streamer is not None
+    held = state.streamer.session
+    return SessionRead(
+        state=held.state,
+        subscribed=held.subscribed,
+        opened=held.opened,
+        reconnects=held.reconnects,
+        messages=held.messages,
+        since=_when(held.since_ns),
+        last_message_at=_when(held.last_message_at_ns),
+        last_error=held.last_error,
+    )
+
+
+SERVES = {
+    DAILY: "closes and daily bars",
+    LIVE: "last, bid and ask; quotes",
+    TRADES: "time and sales",
+}
 
 
 def datasets_read(state: State) -> DatasetsRead:
@@ -118,16 +151,18 @@ def datasets_read(state: State) -> DatasetsRead:
     rows: list[DatasetRead] = []
     for declared in CATALOGUE:
         counts = lake.counts[declared.key] if lake is not None else None
-        daily = declared.key == DAILY
         rows.append(
             DatasetRead(
                 dataset=lake.dataset(declared.key) if lake is not None else declared.key,
                 key=declared.key,
-                serves="closes and daily bars" if daily else "last, bid and ask",
+                serves=SERVES.get(declared.key, declared.key),
                 feed="consolidated",
                 modes=[_mode(m) for m in declared.modes],
                 cadence_seconds=declared.cadence,
                 kept_by_default=bool(declared.licence_default and declared.licence_default.kept),
+                kept_days=declared.licence_default.retention_days
+                if declared.licence_default
+                else 0,
                 personal_use=bool(
                     declared.licence_default and declared.licence_default.personal_use
                 ),
@@ -138,21 +173,26 @@ def datasets_read(state: State) -> DatasetsRead:
                 declined=counts.declined if counts else 0,
                 unconverted=counts.unconverted if counts else 0,
                 wants=counts.wants if counts else 0,
+                withdrawn=counts.withdrawn if counts else 0,
+                unmatched=counts.unmatched if counts else 0,
                 last_recorded_at=_when(counts.last_recorded_at_ns) if counts else "",
             )
         )
     standing = []
     if lake is not None:
+        streamed = set(lake.streamed)
         for want in lake.standing.values():
             symbols = [lake.products.symbols.get(s, s) for s in want.subjects]
             standing.append(
                 StandingRead(
                     want_id=want.want_id,
-                    dataset=lake.dataset(LIVE),
+                    dataset=lake.dataset(want.dataset),
                     subjects=len(want.subjects),
                     symbols=symbols,
                     kinds=list(want.kinds),
-                    last_kept_at=_when(want.last_at_ns),
+                    asks=_asks(want.data_type, want.kinds),
+                    streamed=bool(symbols) and all(s in streamed for s in symbols),
+                    last_kept_at=_when(want.last_at_ns) if want.data_type == PRICE else "",
                 )
             )
     return DatasetsRead(
@@ -161,7 +201,32 @@ def datasets_read(state: State) -> DatasetsRead:
         listings=len(lake.products.symbols) if lake is not None else 0,
         forming=len(lake.forming) if lake is not None else 0,
         reads_instruments=lake.reads_instruments if lake is not None else True,
+        streamed=len(lake.streamed) if lake is not None else 0,
     )
+
+
+def _asks(data_type: str, kinds: tuple[str, ...]) -> str:
+    if data_type == PRICE:
+        return ", ".join(kinds) or "prices"
+    return "quotes" if data_type == QUOTE else "trades"
+
+
+def _stream_row(sessions: list[SessionRead]) -> dict[str, str]:
+    """The stream, one line: its state, what it streams, and its reconnects,
+    each a gap Tradier's history cannot fill."""
+    if not sessions:
+        return {"what": "Stream", "value": "Not started", "note": ""}
+    held = sessions[0]
+    if held.state == "streaming":
+        value = f"{held.subscribed} listings, since {_shown(held.since)}"
+    elif held.state == "idle":
+        value = "Idle: no standing want"
+    else:
+        value = held.state.capitalize()
+    notes = [f"{held.reconnects} reconnects, each a gap not caught up"]
+    if held.last_error:
+        notes.append(held.last_error)
+    return {"what": "Stream", "value": value, "note": "; ".join(notes)}
 
 
 def _mode(mode: object) -> str:
@@ -196,8 +261,8 @@ def _yes(flag: bool) -> dict[str, str]:
     description=(
         "The plugin's connection to Tradier: whether the access token is set (never its "
         "value) and whether Tradier answers it, whether its quotes are real time, Tradier's "
-        "rate limit and what this process has spent of it, the last error, and its "
-        "sessions. No market data."
+        "rate limit and what this process has spent of it, the last error, and the "
+        "stream's session (its state, the listings streamed, its reconnects). No market data."
     ),
 )
 async def connection(request: meridian.Request) -> meridian.Response:
@@ -231,11 +296,7 @@ async def connection(request: meridian.Request) -> meridian.Response:
             "note": f"HTTP {read.last_status}" if read.last_status else "",
         },
         {"what": "Last error", "value": read.last_error or "None", "note": ""},
-        {
-            "what": "Sessions",
-            "value": "None",
-            "note": "Tradier's streaming arrives with the lake's trades and quotes",
-        },
+        _stream_row(read.sessions),
     ]
     return pages.answer(
         "connection.html",
@@ -256,9 +317,9 @@ async def connection(request: meridian.Request) -> meridian.Response:
     description=(
         "The datasets the plugin serves the lake: each one's catalogue entry (what it "
         "serves, how rows arrive, its default terms), whether the token is answered for it "
-        "at Tradier, and what it recorded, restated and declined since the "
-        "plugin started; the standing wants it keeps current; the listings it has served. "
-        "No prices."
+        "at Tradier, and what it recorded, restated, withdrew and declined since the "
+        "plugin started; the standing wants it keeps current and streams; the listings it has "
+        "served. No prices, trades or quotes."
     ),
 )
 async def datasets(request: meridian.Request) -> meridian.Response:
@@ -270,7 +331,11 @@ async def datasets(request: meridian.Request) -> meridian.Response:
             "serves": d.serves,
             "feed": d.feed,
             "modes": ", ".join(d.modes),
-            "terms": ("kept" if d.kept_by_default else "served")
+            "terms": (
+                (f"kept {d.kept_days} days" if d.kept_days else "kept")
+                if d.kept_by_default
+                else "served"
+            )
             + ("; personal" if d.personal_use else ""),
             "entitled": "Yes" if d.entitled else "No",
             "entitled_tone": "good" if d.entitled else "warn",
@@ -306,17 +371,29 @@ async def datasets(request: meridian.Request) -> meridian.Response:
             "id": s.want_id,
             "symbols": ", ".join(s.symbols[:8])
             + (f" and {len(s.symbols) - 8} more" if len(s.symbols) > 8 else ""),
-            "kinds": ", ".join(s.kinds),
+            "dataset": s.dataset.rpartition(":")[2],
+            "asks": s.asks,
             "subjects": str(s.subjects),
-            "kept": _shown(s.last_kept_at),
+            "streamed": "Yes" if s.streamed else "No",
+            "streamed_tone": "good" if s.streamed else "warn",
+            "kept": _shown(s.last_kept_at) if s.last_kept_at else "streamed",
         }
-        for s in read.standing[:STANDING_SHOWN]
+        for s in read.standing
     ]
     standing_columns = [
         {"key": "symbols", "label": "Listings", "strong": True, "priority": 1},
-        {"key": "kinds", "label": "Prices", "priority": 3},
-        {"key": "subjects", "label": "Subjects", "type": "number", "priority": 1},
-        {"key": "kept", "label": "Last kept", "priority": 2},
+        {"key": "dataset", "label": "Dataset", "priority": 2, "width": "5rem"},
+        {"key": "asks", "label": "Asks", "priority": 3},
+        {"key": "subjects", "label": "Subjects", "type": "number", "priority": 3},
+        {
+            "key": "streamed",
+            "label": "Streamed",
+            "type": "badge",
+            "tone": {"field": "streamed_tone"},
+            "priority": 1,
+            "width": "6rem",
+        },
+        {"key": "kept", "label": "Last kept", "priority": 3},
     ]
     return pages.answer(
         "datasets.html",
@@ -325,7 +402,6 @@ async def datasets(request: meridian.Request) -> meridian.Response:
         grid_rows=grid_rows,
         standing_grid={"columns": standing_columns, "rows": standing_rows},
         standing_rows=standing_rows,
-        more=max(0, len(read.standing) - STANDING_SHOWN),
     )
 
 

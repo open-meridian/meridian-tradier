@@ -1,5 +1,5 @@
 {
- "_about": "Synthetic: shaped on Tradier's documented responses (market data API v1), every value invented. Numbers are text here and sent as JSON numbers, as Tradier sends them; a list of one is sent as the one object, as Tradier does.",
+ "_about": "Synthetic: shaped on Tradier's documented responses (market data API v1), every value invented. Numbers are text here and sent as JSON numbers, as Tradier sends them; a list of one is sent as the one object, as Tradier does. The stream's events (`stream`) are replayed by synthetic mode, a cycle every `every_seconds`, each stamped `at_ms` after the cycle began and its sequence numbers moved on by the cycle.",
  "history": {
   "SPY": [
    {
@@ -175,5 +175,132 @@
    "trade_date": "1791575998100",
    "prevclose": "453.40"
   }
+ },
+ "stream": {
+  "every_seconds": "2",
+  "events": [
+   {
+    "type": "timesale",
+    "symbol": "SPY",
+    "exch": "Q",
+    "bid": "575.44",
+    "ask": "575.47",
+    "last": "575.46",
+    "size": "100",
+    "seq": "1",
+    "flag": "",
+    "cancel": false,
+    "correction": false,
+    "session": "regular",
+    "at_ms": "0"
+   },
+   {
+    "type": "quote",
+    "symbol": "SPY",
+    "bid": "575.45",
+    "bidsz": "3",
+    "bidexch": "P",
+    "ask": "575.48",
+    "asksz": "2",
+    "askexch": "Q",
+    "at_ms": "5"
+   },
+   {
+    "type": "timesale",
+    "symbol": "SPY",
+    "exch": "P",
+    "bid": "575.45",
+    "ask": "575.48",
+    "last": "575.47",
+    "size": "7",
+    "seq": "2",
+    "flag": "X",
+    "cancel": false,
+    "correction": false,
+    "session": "regular",
+    "at_ms": "10"
+   },
+   {
+    "type": "timesale",
+    "symbol": "SPY",
+    "exch": "Q",
+    "bid": "575.45",
+    "ask": "575.48",
+    "last": "575.48",
+    "size": "200",
+    "seq": "3",
+    "flag": "",
+    "cancel": false,
+    "correction": false,
+    "session": "regular",
+    "at_ms": "20"
+   },
+   {
+    "type": "timesale",
+    "symbol": "SPY",
+    "exch": "Q",
+    "bid": "575.45",
+    "ask": "575.48",
+    "last": "575.48",
+    "size": "200",
+    "seq": "3",
+    "flag": "",
+    "cancel": true,
+    "correction": false,
+    "session": "regular",
+    "at_ms": "20"
+   },
+   {
+    "type": "quote",
+    "symbol": "BRK/B",
+    "bid": "455.32",
+    "bidsz": "1",
+    "bidexch": "N",
+    "ask": "0",
+    "asksz": "0",
+    "askexch": "",
+    "at_ms": "30"
+   },
+   {
+    "type": "timesale",
+    "symbol": "BRK/B",
+    "exch": "N",
+    "bid": "455.32",
+    "ask": "455.41",
+    "last": "455.33",
+    "size": "25",
+    "seq": "4",
+    "flag": "",
+    "cancel": false,
+    "correction": false,
+    "session": "regular",
+    "at_ms": "40"
+   },
+   {
+    "type": "timesale",
+    "symbol": "TQQQ",
+    "exch": "Q",
+    "bid": "82.44",
+    "ask": "82.46",
+    "last": "82.45",
+    "size": "300",
+    "seq": "5",
+    "flag": "",
+    "cancel": false,
+    "correction": false,
+    "session": "post",
+    "at_ms": "50"
+   },
+   {
+    "type": "trade",
+    "symbol": "SPY",
+    "exch": "Q",
+    "price": "575.46",
+    "size": "100",
+    "cvol": "61338667",
+    "last": "575.46",
+    "at_ms": "0"
+   }
+  ]
  }
 }

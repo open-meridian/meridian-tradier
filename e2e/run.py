@@ -8,12 +8,13 @@ committed, through the same run.
 Two plugins: `tradier`, this one, and `reader` (e2e/reader.py), a stand-in for
 whatever reads prices, from the same image.
 
-1. The catalogue: both datasets listed by `dashboard__list_datasets`, as the
-   plugin declared them -- daily pulled and pushed, its day New York's to
-   16:00; live pulled and streamed -- each with Tradier's terms, one
-   person's, as its default licence.
-2. Licensed and entitled: the deployment admin licenses both, and entitles
-   the reader to both, the broker reloaded with each.
+1. The catalogue: the three datasets listed by `dashboard__list_datasets`,
+   as the plugin declared them -- daily pulled and pushed, its day New
+   York's to 16:00; live pulled and streamed; trades streamed,
+   kept two days -- each with Tradier's terms, one person's, as its default
+   licence.
+2. Licensed and entitled: the deployment admin licenses the three, and
+   entitles the reader to them, the broker reloaded with each.
 3. A close wanted: the reader reads SPY's close for 2026-10-08, which the lake
    has not got, so asks the plugin; the plugin records it against the want:
    573.86 in dollars, consolidated (no venue), its business date a plain
@@ -29,11 +30,26 @@ whatever reads prices, from the same image.
    consolidated, its trade's exchange by Tradier's code Q, recorded with no
    venue and the code as reported, and the miss counted (the harness has no
    platform to pull the venue from).
+6b. Quotes (contract v19): the reader reads SPY's and BRK.B's latest quotes,
+   which the lake has not got; live is streamed, so the read is a standing
+   want, and the plugin records each listing's quote and streams them from
+   then on: SPY's two-sided with its sizes in shares, BRK.B's with no offer.
+6c. Trades: under those standing wants the synthetic stream's time and
+   sales are recorded, kept two days: read over a range, a regular print
+   eligible for every statistic with no aggressor and its sequence number,
+   one withdrawn by its cancel as its next version, and one with a flag
+   Tradier does not document, kept as reported, its eligibilities not
+   known.
+6d. Caught up from the lake: the trades recorded after the watermark the
+   last read said, none read twice.
 7. Parity: the plugin's pages, Connection and Datasets, read under Manage and
    through `/mcp` as `tradier__read_connection` and `tradier__read_datasets`,
-   the same answers; neither shows a price.
+   the same answers, the stream's session among them; neither shows a
+   price.
 8. Storage: the plugin's container made again keeps which listing each
-   subject is, in the storage the deployment grants it.
+   subject is, in the storage the deployment grants it. (It does not stream
+   again: contract v19 gives a dgm no read of the standing wants, and the
+   lake does not ask again for one that stands.)
 9. `store lake`: each row as recorded, numbered with no holes, the wants
    answered and declined, the venue's miss.
 
@@ -58,7 +74,8 @@ LOG = ".e2e/runner.log"
 COMPOSE = ["docker", "compose", "-p", NAME, "-f", ".e2e/harness/compose.yaml",
            "-f", ".e2e/harness/plugins.yaml", "-f", "e2e/plugin.yaml"]
 DAY = "2026-10-08"
-DAILY, LIVE = "tradier:daily", "tradier:live"
+DAILY, LIVE, TRADES = "tradier:daily", "tradier:live", "tradier:trades"
+MINUTE_NS = 60 * 10**9
 COMPOSE += ["-f", "e2e/recorded.yaml"] if RECORDED else []
 
 
@@ -154,11 +171,16 @@ def run():
     # 1. The catalogue.
     def listed():
         held = {d["dataset"]: d for d in call("dashboard__list_datasets", {}, "read")["data"]["datasets"]}
-        return held if {DAILY, LIVE} <= set(held) else None
-    held = until(90, listed, "step 1, the two datasets were not listed")
+        return held if {DAILY, LIVE, TRADES} <= set(held) else None
+    held = until(90, listed, "step 1, the three datasets were not listed")
     daily, live = held[DAILY]["catalogue_entry"], held[LIVE]["catalogue_entry"]
-    must(daily["modes"] == ["pull", "push"] and live["modes"] == ["pull", "stream"],
-         f"step 1, the modes: {daily['modes']}, {live['modes']}")
+    trades_entry = held[TRADES]["catalogue_entry"]
+    must(daily["modes"] == ["pull", "push"] and live["modes"] == ["pull", "stream"]
+         and trades_entry["modes"] == ["stream"],
+         f"step 1, the modes: {daily['modes']}, {live['modes']}, {trades_entry['modes']}")
+    must(trades_entry["licence_default"]["kept"] is True
+         and trades_entry["licence_default"]["retention_days"] == 2,
+         f"step 1, trades kept two days by default: {trades_entry['licence_default']}")
     must(daily["day_time_zone"] == "America/New_York" and daily["day_end_minute"] == 960,
          f"step 1, the declared day: {daily}")
     must(daily["licence_default"]["personal_use"] is True and daily["licence_default"]["kept"] is True
@@ -170,7 +192,9 @@ def run():
            "personal_use=true", "note=Tradier's terms: the account holder's personal use.")
     runner("licence", LIVE, "kept=true", "retention_days=2", "derived_use=true", "display=true",
            "personal_use=true", "note=Kept two days, for the e2e to read back.")
-    for dataset in (DAILY, LIVE):
+    runner("licence", TRADES, "kept=true", "retention_days=2", "derived_use=true", "display=true",
+           "personal_use=true", "note=Tradier's terms; kept two days, for catching up.")
+    for dataset in (DAILY, LIVE, TRADES):
         runner("entitle", "--instance", "reader", dataset, "note=The e2e's reader.")
 
     ids = reader("/resolve")
@@ -185,12 +209,12 @@ def run():
     row = close[0]
     must(same(row["amount"], "573.86") and row["currency_code"] in ("USD", "") and row["venue_id"] == ""
          and row["business_date"] == DAY and row["published"] and row["version"] == 1
-         and row["row_key"] == "SPY:1d:2026-10-08" and row["raw"].startswith("history/SPY/"),
+         and row["row_key"] == f"SPY:1d:2026-10-08@{spy}" and row["raw"].startswith("history/SPY/"),
          f"step 3, SPY's close as recorded: {row}")
 
     # 4. A share class: the close and the bar.
     brk_close = answered(f"/prices?subject={brk}&date={DAY}&kind=close&dataset={DAILY}")["prices"]
-    must(len(brk_close) == 1 and same(brk_close[0]["amount"], "453.44") and brk_close[0]["row_key"] == "BRK.B:1d:2026-10-08",
+    must(len(brk_close) == 1 and same(brk_close[0]["amount"], "453.44") and brk_close[0]["row_key"] == f"BRK.B:1d:2026-10-08@{brk}",
          f"step 4, BRK.B's close: {brk_close}")
     bars = answered(f"/bars?subject={brk}&date={DAY}&dataset={DAILY}", rows="bars")["bars"]
     must(len(bars) == 1 and same(bars[0]["close"], "453.44")
@@ -200,7 +224,7 @@ def run():
     # 5. Another source's record, read and priced.
     reader(f"/prices?subject={other}&date={DAY}&kind=close&dataset={DAILY}")
     held = answered(f"/prices?subject={other}&date={DAY}&kind=close&dataset={DAILY}")["prices"]
-    must(len(held) == 1 and same(held[0]["amount"], "82.45") and held[0]["row_key"] == "TQQQ:1d:2026-10-08",
+    must(len(held) == 1 and same(held[0]["amount"], "82.45") and held[0]["row_key"] == f"TQQQ:1d:2026-10-08@{other}",
          f"step 5, TQQQ's close for another source's record: {held}")
 
     # 6. Live, on a venue the deployment does not hold.
@@ -210,6 +234,58 @@ def run():
          and last[0]["unconverted"] == ["tradier:venue=Q"] and last[0]["business_date"] == "",
          f"step 6, SPY's last, its exchange kept as reported: {last}")
 
+    # 6b. Quotes: a standing want of a streamed dataset.
+    def quoted(subject, streamed=lambda q: True):
+        def attempt():
+            got = reader(f"/quotes?subject={subject}&dataset={LIVE}")
+            return [q for q in got["quotes"] if RECORDED or streamed(q)] or None
+        return until(90, attempt, f"step 6b, {subject}'s quote was never recorded")
+    spy_quote = quoted(spy)[0]
+    must(spy_quote["bid"] and spy_quote["ask"] and same(spy_quote["bid_quantity"], "300")
+         and same(spy_quote["ask_quantity"], "200") and spy_quote["business_date"] == ""
+         and spy_quote["venue_id"] == "" and spy_quote["unconverted"] == [],
+         f"step 6b, SPY's quote, two-sided with its sizes: {spy_quote}")
+    # The stream's quote, later than the latest one read when it was wanted.
+    brk_quote = quoted(brk, lambda q: q["ask"] is None)[0]
+    must(RECORDED or (brk_quote["bid"] and brk_quote["ask"] is None and brk_quote["ask_quantity"] is None),
+         f"step 6b, BRK.B's quote with no offer: {brk_quote}")
+
+    # 6c. Trades streamed under the standing wants, read over a range.
+    def traded(after=None, at_least=1):
+        def attempt():
+            if after:
+                got = reader(f"/trades?subject={spy}&dataset={TRADES}&after={after}")
+            else:
+                now = time.time_ns()
+                got = reader(f"/trades?subject={spy}&dataset={TRADES}"
+                             f"&from={now - 10 * MINUTE_NS}&until={now + MINUTE_NS}")
+            return got if len({t["row_key"] for t in got["trades"]}) >= at_least else None
+        return until(120, attempt, f"step 6c/6d, SPY's trades were never recorded (after {after})")
+    if not RECORDED:
+        day = traded(at_least=3)
+        rows = day["trades"]
+        # The harness holds no venue: each print keeps Tradier's code as reported.
+        regular = [t for t in rows if not t["cancelled"]
+                   and all(u.startswith("tradier:venue=") for u in t["unconverted"])]
+        flagged = [t for t in rows if "tradier:timesale.flag=X" in t["unconverted"]]
+        withdrawn = [t for t in rows if t["cancelled"]]
+        must(regular and all(r["consolidated"] == ["ELIGIBLE_ELIGIBLE"] * 4
+                             and r["aggressor"] == "AGGRESSOR_UNSPECIFIED" and r["source_sequence"] > 0
+                             and r["business_date"] == "" for r in regular),
+             f"step 6c, a regular print, every statistic, no aggressor, its sequence: {regular[:2]}")
+        must(withdrawn and all(t["version"] == 2 for t in withdrawn),
+             f"step 6c, a print withdrawn by its cancel as its next version: {withdrawn[:2]}")
+        must(flagged and flagged[0]["consolidated"] == ["ELIGIBLE_UNSPECIFIED"] * 4,
+             f"step 6c, a flag kept as reported: {flagged[:1]}")
+        must(all(spy in t["subjects"] for t in rows),
+             f"step 6c, every row names its listing's records: {rows[:1]}")
+
+        # 6d. Caught up from the lake, after the watermark the read said.
+        later = traded(after=day["watermark"])
+        seen = {(t["row_key"], t["version"]) for t in rows}
+        must(not any((t["row_key"], t["version"]) in seen for t in later["trades"]),
+             f"step 6d, nothing read twice after the watermark: {later['trades'][:2]}")
+
     # 7. Parity: the pages under Manage and their tools through /mcp.
     listed_tools = runner("mcp", "list").split()
     for tool in ("tradier__read_connection", "tradier__read_datasets"):
@@ -217,11 +293,14 @@ def run():
     connection = call("tradier__read_connection", {}, "unchanged")["data"]
     must(connection["mode"] == "synthetic" and connection["daily_feed"] == "history",
          f"step 7, read_connection: {connection}")
+    must(connection["sessions"] and connection["sessions"][0]["state"] == "streaming",
+         f"step 7, the stream's session: {connection['sessions']}")
     datasets = call("tradier__read_datasets", {}, "unchanged")["data"]
     by_key = {d["key"]: d for d in datasets["datasets"]}
     must(by_key["daily"]["recorded"] >= 4
          and by_key["live"]["recorded"] >= 1 and datasets["listings"] == 4
-         and datasets["reads_instruments"] is True,
+         and datasets["reads_instruments"] is True and datasets["streamed"] >= 2
+         and (RECORDED or next(d for d in datasets["datasets"] if d["key"] == "trades")["recorded"] >= 3),
          f"step 7, read_datasets: {datasets}")
     shown = page("tradier", "admin", "/datasets")
     must("tradier:daily" in shown and "573.86" not in shown, "step 7, the Datasets page shows no price")
@@ -246,8 +325,8 @@ def run():
     must(sequences == list(range(1, len(sequences) + 1)) and len(sequences) >= 3,
          f"step 9, daily's rows numbered from 1 with no holes: {sequences}")
     keys = {(r[2], r[4]) for r in daily_rows}
-    must({("price", "SPY:1d:2026-10-08"), ("price", "BRK.B:1d:2026-10-08"),
-          ("bar", "BRK.B:1d:2026-10-08")} <= keys, f"step 9, the rows kept: {sorted(keys)}")
+    must({("price", f"SPY:1d:2026-10-08@{spy}"), ("price", f"BRK.B:1d:2026-10-08@{brk}"),
+          ("bar", f"BRK.B:1d:2026-10-08@{brk}")} <= keys, f"step 9, the rows kept: {sorted(keys)}")
     must(any(line.startswith(f"want|{DAILY}|answered|{other}") for line in lines),
          f"step 9, another source's record answered: {[l for l in lines if l.startswith('want|')]}")
     must(any(line.startswith(f"want|{DAILY}|answered|{spy}") for line in lines),
@@ -256,16 +335,21 @@ def run():
     must(live_rows and all(r[-1] not in ("", "0") for r in live_rows),
          f"step 9, the live rows carry their unconverted venue: {live_rows}")
     must(any(line.startswith("miss|tradier|") for line in lines), f"step 9, the venue's miss: {lines}")
+    trade_rows = [line.split("|") for line in lines if line.startswith(f"row|{TRADES}|")]
+    numbered = sorted(int(r[3]) for r in trade_rows)
+    must(RECORDED or (numbered and numbered == list(range(1, len(numbered) + 1))),
+         f"step 9, the trades numbered from 1 with no holes: {numbered[:20]}")
 
     took = int(time.time() - started)
-    print(f"{NAME} OK in {took}s on the plugin harness, synthetic, no key: both datasets listed as "
+    print(f"{NAME} OK in {took}s on the plugin harness, synthetic, no key: the three datasets listed as "
           "declared, Tradier's personal-use terms their default licence; licensed and the reader "
           "entitled; SPY's 2026-10-08 close wanted and recorded against the want (573.86, "
           "consolidated, a plain date, published at the close); BRK.B's close and bar (no VWAP); "
           "another source's record read and its close recorded (82.45); SPY's "
           "last on its exchange with the venue kept as reported and the miss counted; Connection and "
           "Datasets read under Manage and through /mcp alike, no price shown; the product map "
-          "kept across a new container; `store lake` numbered with no holes")
+          "kept across a new container; `store lake` numbered with no holes; quotes as a standing want, streamed; trades streamed and kept, their "
+          "attributes converted, caught up after the watermark")
 
 
 def main():
