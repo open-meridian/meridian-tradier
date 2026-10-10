@@ -45,13 +45,14 @@ meridian-python checkout instead. Not released.
   available), trades and quotes and Tradier's streaming (with the lake's next
   revision).
 
-**One limit of contract 18.** The lake asks for a price by the deployment's
-own instrument ID. A `dgm` may resolve its own identifiers to an instrument,
-but may not read an instrument's record, so it can name to Tradier only the
-listings it resolved itself by their symbol. An instrument known to the
-deployment only by another source's identifier (a custodian's symbol, say)
-is declined, not covered, and the Datasets page says why. The code already
-reads an instrument's record where the deployment allows it.
+**Instruments another source named.** The lake asks for a price by the
+deployment's own instrument ID. An instrument known to the deployment only
+by another source's identifiers -- a custodian's symbol and CUSIP, as the
+book holds it -- is read from its record, priced under the listing's one
+spelling, and Tradier's symbol is added to the record. Only a record
+carrying no symbol is declined, not covered. On a runtime from before
+contract 18 let a `dgm` read an instrument's record, such an instrument is
+declined, and the Datasets page says why.
 
 ## Tradier's terms, summarised
 

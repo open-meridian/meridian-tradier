@@ -12,6 +12,9 @@
   row key until final; listings resolved by their one spelling (`BRK.B`,
   asked of Tradier as `BRK/B`), a last price's exchange by Tradier's code,
   misses reported.
+- An instrument the book holds from another source, known only by that
+  source's identifiers (a custodian's symbol and CUSIP), read from its
+  record and priced under the listing's one spelling.
 - Connection and Datasets under Manage, each a read tool
   (`read_connection`, `read_datasets`).
 - The SDK's `dgm` suite, unchanged; an e2e on core's plugin harness with the

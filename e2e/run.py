@@ -20,9 +20,11 @@ whatever reads prices, from the same image.
    date, published at the close, its raw record named.
 4. A share class: BRK.B, asked of Tradier as BRK/B, its close and daily bar
    (no VWAP, as Tradier states none), its row keyed in the one spelling.
-5. Not covered: TQQQ, known to the deployment only by another source's
-   symbol, is declined: contract v18 grants a dgm no read of an instrument's
-   record (W3.6), so the plugin serves the listings it resolved itself.
+5. Another source's record: TQQQ, known to the deployment only as a
+   custodian's book holds it (its CUSIP and the custodian's symbol), is
+   wanted; the plugin reads the record (W3.6, a dgm's from contract v18 as
+   ruled 2026-10-10), finds its own symbol and records the close against
+   the want: 82.45, keyed in the one spelling.
 6. Live, on a venue the deployment does not hold: SPY's last price,
    consolidated, its trade's exchange by Tradier's code Q, recorded with no
    venue and the code as reported, and the miss counted (the harness has no
@@ -195,8 +197,11 @@ def run():
          and (RECORDED or bars[0]["vwap"] is False) and same(bars[0]["volume"], "3559789"),
          f"step 4, BRK.B's bar, no VWAP: {bars}")
 
-    # 5. Not covered: another source's record.
+    # 5. Another source's record, read and priced.
     reader(f"/prices?subject={other}&date={DAY}&kind=close&dataset={DAILY}")
+    held = answered(f"/prices?subject={other}&date={DAY}&kind=close&dataset={DAILY}")["prices"]
+    must(len(held) == 1 and same(held[0]["amount"], "82.45") and held[0]["row_key"] == "TQQQ:1d:2026-10-08",
+         f"step 5, TQQQ's close for another source's record: {held}")
 
     # 6. Live, on a venue the deployment does not hold.
     reader(f"/prices?subject={spy}&kind=last&dataset={LIVE}")
@@ -214,9 +219,9 @@ def run():
          f"step 7, read_connection: {connection}")
     datasets = call("tradier__read_datasets", {}, "unchanged")["data"]
     by_key = {d["key"]: d for d in datasets["datasets"]}
-    must(by_key["daily"]["recorded"] >= 3 and by_key["daily"]["declined"] >= 1
-         and by_key["live"]["recorded"] >= 1 and datasets["listings"] == 3
-         and datasets["reads_instruments"] is False,
+    must(by_key["daily"]["recorded"] >= 4
+         and by_key["live"]["recorded"] >= 1 and datasets["listings"] == 4
+         and datasets["reads_instruments"] is True,
          f"step 7, read_datasets: {datasets}")
     shown = page("tradier", "admin", "/datasets")
     must("tradier:daily" in shown and "573.86" not in shown, "step 7, the Datasets page shows no price")
@@ -228,8 +233,8 @@ def run():
                    "import json; from meridian import edge; "
                    "print(json.dumps(json.load(open(edge.storage_dir() / 'products.json'))))").stdout
     products = json.loads(kept)
-    must(products.get(spy) == "SPY" and products.get(brk) == "BRK.B"
-         and sorted(products.values()) == ["BRK.B", "SPY", "TQQQ"] and other not in products,
+    must(products.get(spy) == "SPY" and products.get(brk) == "BRK.B" and products.get(other) == "TQQQ"
+         and sorted(products.values()) == ["BRK.B", "SPY", "TQQQ", "TQQQ"],
          f"step 8, the product map kept: {kept}")
     runner("ready", "--instance", "tradier")
 
@@ -243,8 +248,8 @@ def run():
     keys = {(r[2], r[4]) for r in daily_rows}
     must({("price", "SPY:1d:2026-10-08"), ("price", "BRK.B:1d:2026-10-08"),
           ("bar", "BRK.B:1d:2026-10-08")} <= keys, f"step 9, the rows kept: {sorted(keys)}")
-    must(any(line.startswith(f"want|{DAILY}|declined|{other}") for line in lines),
-         f"step 9, another source's record declined: {[l for l in lines if l.startswith('want|')]}")
+    must(any(line.startswith(f"want|{DAILY}|answered|{other}") for line in lines),
+         f"step 9, another source's record answered: {[l for l in lines if l.startswith('want|')]}")
     must(any(line.startswith(f"want|{DAILY}|answered|{spy}") for line in lines),
          f"step 9, SPY's want answered: {[l for l in lines if l.startswith('want|')]}")
     live_rows = [line.split("|") for line in lines if line.startswith(f"row|{LIVE}|")]
@@ -257,7 +262,7 @@ def run():
           "declared, Tradier's personal-use terms their default licence; licensed and the reader "
           "entitled; SPY's 2026-10-08 close wanted and recorded against the want (573.86, "
           "consolidated, a plain date, published at the close); BRK.B's close and bar (no VWAP); "
-          "another source's record declined, a dgm reading no instrument record in v18; SPY's "
+          "another source's record read and its close recorded (82.45); SPY's "
           "last on its exchange with the venue kept as reported and the miss counted; Connection and "
           "Datasets read under Manage and through /mcp alike, no price shown; the product map "
           "kept across a new container; `store lake` numbered with no holes")
