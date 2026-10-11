@@ -7,20 +7,24 @@ exactly what the page shows.
 
 ## Connection (`read_connection`)
 
-- **Mode:** live, synthetic (a developer's built-in exchange) or no key.
+- **Mode:** live, sandbox (Tradier's developer sandbox: delayed 15 minutes,
+  no streaming), synthetic (a developer's built-in exchange) or no key.
 - **Token:** whether it is set; never its value.
 - **Entitled / Not entitled:** whether Tradier answered the token for its
-  daily history and for real-time quotes.
+  daily history and for real-time quotes (on the sandbox, quotes delayed 15
+  minutes; trades, which are only streamed, not entitled).
 - **Rate limit:** the plugin spends at most 60 calls a minute, half of
   Tradier's 120 for market data; calls since it started, any answered "too
   many requests" and waited out.
 - **Last call, last error.**
 - **Stream:** whether it is streaming, how many listings, since when; and
-  its reconnects, each a gap Tradier's history cannot fill.
+  its reconnects, each a gap Tradier's history cannot fill. On the sandbox,
+  none.
 
 ## Datasets (`read_datasets`)
 
-- Each dataset: how its rows arrive, its default terms, whether Tradier
+- Each dataset: its feed, with the host Tradier is asked at
+  (`api.tradier.com`, or `sandbox.tradier.com`, delayed), how its rows arrive, its default terms, whether Tradier
   answers the token for it, and what it recorded, restated, declined and
   could not convert since the plugin started.
 - **Kept current:** the standing wants, searched and paged: for which

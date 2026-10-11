@@ -11,7 +11,7 @@ pass the same suite of the SDK, unchanged. Tradier is also a broker; this
 repository is named for the vendor so that a `custody` or `ccm` role can
 arrive here later without a rename.
 
-**Status:** 0.2.0, on open-meridian 0.23.0 (contract 19), proven against core
+**Status:** 0.2.1, on open-meridian 0.23.0 (contract 19), proven against core
 e149c69's runtime and plugin harness. Not released.
 
 ## What it serves
@@ -117,8 +117,14 @@ for an individual it does not expire.
 2. In the deployment, open the plugin under **Manage**, then **Settings**.
 3. Enter the **API access token**. It is a secret setting: once saved it is
    never shown again, logged, put on a page or sent anywhere but Tradier.
+   Leave **Tradier's developer sandbox** off: it is for testing with a
+   developer sandbox token instead, and then the plugin asks
+   `sandbox.tradier.com`, whose data is delayed 15 minutes and which does
+   not stream; live prices are still kept current once a minute.
 4. Open **Connection**: it says whether the token is set (never its value),
-   whether Tradier answered, and whether its quotes are real time.
+   whether Tradier answered, and whether its quotes are real time; with the
+   sandbox on, "Tradier's developer sandbox: delayed 15 minutes, no
+   streaming". **Datasets** names the host asked.
 5. On the deployment's **Data sources** page, license `daily`, `live` and
    `trades`,
    and entitle the plugins that read prices.

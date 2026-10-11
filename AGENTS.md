@@ -8,7 +8,8 @@ as for every plugin.
 ## This plugin
 
 - `src/tradier/declaration.py`: the catalogue (`daily`, `live` and `trades`), the
-  settings (the access token, secret; `synthetic`, a developer's) and the
+  settings (the access token, secret; `sandbox`, Tradier's developer
+  sandbox, delayed and not streamed; `synthetic`, a developer's) and the
   storage. A dataset's key, modes, day and default terms change only with a
   new version, and the deployment admin sees them before approving it.
 - `src/tradier/vendor.py`: the only module that speaks to Tradier. Every

@@ -265,6 +265,8 @@ class Lake:
         self.past_limit: set[str] = set()
         self.stream_limit: int | None = None
         self.streamer: Any = None
+        #: Whether the source streams: Tradier's developer sandbox does not.
+        self.streaming = True
         self.pending_trades: list[Trade] = []
         self.pending_quotes: dict[str, SourceQuote] = {}
         self._trades_at = 0
@@ -755,9 +757,11 @@ class Lake:
 
     def restream(self) -> set[str]:
         """Stream the listings under the standing wants, in the order they
-        were wanted, as many as one session may; the listings past that."""
+        were wanted, as many as one session may; the listings past that. A
+        source that does not stream streams none and declines none: its live
+        prices are still kept current at the cadence."""
         ordered: list[str] = []
-        for standing in self.standing.values():
+        for standing in self.standing.values() if self.streaming else ():
             for subject in standing.subjects:
                 symbol = self.products.symbols.get(subject)
                 if symbol and symbol not in ordered:

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.1 (unreleased)
+
+- `sandbox`, a setting off by default, "Tradier's developer sandbox": for
+  testing with a developer sandbox token, the plugin asks
+  `sandbox.tradier.com` with it. Its data is delayed 15 minutes, so quotes
+  are marked delayed, not real time; it does not stream, so no stream is
+  opened and live prices are kept current once a minute as without one.
+  Connection says "Tradier's developer sandbox: delayed 15 minutes, no
+  streaming"; Datasets names the host asked in each dataset's feed. A live
+  brokerage token leaves it off, and nothing changes.
+
 ## 0.2.0 (unreleased)
 
 - On open-meridian 0.23.0 (contract 19): the lake's trades and quotes.

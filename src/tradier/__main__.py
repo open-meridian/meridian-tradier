@@ -5,13 +5,15 @@ plans/the-lake-prices-the-book, the retail pair).
 It connects to the sidecar it is launched beside, declaring its catalogue,
 its settings and its storage (declaration.py) and its pages (page.py); on
 each delivery of its settings it makes its Tradier client again with the
-token (or, in synthetic mode, the built-in exchange) and asks whether Tradier
-answers it; then it hears what the lake wants of it and records against
+token (or, in synthetic mode, the built-in exchange; with `sandbox` on,
+Tradier's developer sandbox, delayed and not streamed) and asks whether
+Tradier answers it; then it hears what the lake wants of it and records against
 each want or declines it per subject (lake.py), and keeps its timetable:
 standing wants kept current, days still forming read again, a final close
 pushed. While any standing want stands, it streams Tradier's time and sales
 and quotes for the listings wanted (stream.py), reconnecting with a new
-session when the stream breaks.
+session when the stream breaks; on the sandbox, which does not stream, it
+opens none, and keeps live prices current as it does without a stream.
 
 It holds nothing it cannot lose: what each subject's symbol is, and every
 raw response, are in the storage the deployment grants it (decisions/028);
@@ -39,11 +41,11 @@ from .declaration import DECLARATION
 from .lake import Lake, Products
 from .page import TITLE, State, pages, serve
 from .raw import RawStore, storage_root
-from .settings import DECLARED, Config, config_from
+from .settings import DECLARED, SANDBOX_SAID, Config, config_from
 from .source import TradierSource
 from .stream import Feed, FeedError, Refused, Streamer, TradierFeed
 from .synthetic import SyntheticFeed, SyntheticTransport, exchange
-from .vendor import NoKey, Tradier, VendorError, urllib_transport
+from .vendor import API, SANDBOX, NoKey, Tradier, Transport, VendorError, urllib_transport
 
 log = logging.getLogger("tradier")
 
@@ -51,23 +53,29 @@ log = logging.getLogger("tradier")
 TICK_SECONDS = 15
 
 
-def source_for(config: Config, store: RawStore) -> tuple[Tradier | None, TradierSource | None]:
-    """The client and the source the settings give: synthetic, the token's,
-    or none while there is no token."""
+def source_for(
+    config: Config, store: RawStore, transport: Transport = urllib_transport
+) -> tuple[Tradier | None, TradierSource | None]:
+    """The client and the source the settings give: synthetic, the token's
+    at Tradier or at its developer sandbox, or none while there is no
+    token."""
     if config.synthetic:
         tradier = Tradier(store, None, transport=SyntheticTransport(), keyless=True)
         return tradier, TradierSource(tradier, synthetic=True)
     if config.credentials is None:
         return None, None
-    tradier = Tradier(store, config.credentials, transport=urllib_transport)
+    base = SANDBOX if config.on_sandbox else API
+    tradier = Tradier(store, config.credentials, transport=transport, base=base)
     return tradier, TradierSource(tradier)
 
 
 def feed_for(state: State, store: RawStore) -> Feed | None:
     """The stream the settings give: synthetic, Tradier's with the token, or
-    none while there is no token."""
+    none while there is no token, or on the sandbox, which does not stream."""
     if state.config.synthetic:
         return SyntheticFeed(store)
+    if state.config.on_sandbox:
+        return None
     tradier = state.tradier
     if state.config.credentials is None or tradier is None:
         return None
@@ -103,6 +111,9 @@ async def health(plugin: meridian.Plugin, state: State) -> None:
     if not entitled.answered:
         await plugin.report(healthy=False, detail=f"Tradier refused the token: {entitled.detail}")
         return
+    if config.on_sandbox:
+        await plugin.report(healthy=True, detail=f"answering at {SANDBOX_SAID}")
+        return
     timing = "real time" if entitled.real_time else "delayed"
     await plugin.report(healthy=True, detail=f"answering; quotes {timing}, consolidated")
 
@@ -115,6 +126,7 @@ async def watch_settings(
         state.tradier, state.source = source_for(state.config, store)
         if state.lake is not None:
             state.lake.source = state.source
+            state.lake.streaming = not state.config.on_sandbox
             if state.config.synthetic:
                 # The built-in exchange's listings, as a source's own list.
                 await state.lake.seed(sorted(spelled(s) or s for s in exchange()["history"]))

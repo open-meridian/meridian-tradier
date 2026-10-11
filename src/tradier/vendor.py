@@ -1,7 +1,8 @@
 """Tradier's market data API: the one module that speaks to it.
 
-REST at api.tradier.com/v1 (or its sandbox, sandbox.tradier.com/v1, delayed
-15 minutes, for a developer's own check): `/markets/history` (one symbol's
+REST at api.tradier.com/v1 (or its developer sandbox, sandbox.tradier.com/v1,
+delayed 15 minutes and with no stream, with the `sandbox` setting or `make
+live SANDBOX=1`): `/markets/history` (one symbol's
 daily bars over a range), `/markets/quotes` (many symbols' last trade and
 best bid and ask) and, to stream, `/markets/events/session` (a session for
 the WebSocket at `STREAM`, which stream.py speaks). Market data for a
@@ -45,7 +46,7 @@ from .settings import Credentials
 
 API = "https://api.tradier.com/v1"
 SANDBOX = "https://sandbox.tradier.com/v1"
-USER_AGENT = "meridian-tradier/0.2.0 (+https://open-meridian.dev)"
+USER_AGENT = "meridian-tradier/0.2.1 (+https://open-meridian.dev)"
 #: Tradier's market data over WebSocket, for a session made by REST.
 STREAM = "wss://ws.tradier.com/v1/markets/events"
 NS = 1_000_000_000

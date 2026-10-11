@@ -13,6 +13,7 @@ standing wants, which grow, searched and paged (the kit's `search` on an
 from __future__ import annotations
 
 import datetime as dt
+import urllib.parse
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -31,7 +32,7 @@ from .records import (
     SessionRead,
     StandingRead,
 )
-from .settings import Config
+from .settings import SANDBOX_SAID, Config
 from .source import TradierSource
 from .stream import Streamer
 from .vendor import LIMIT_PER_MINUTE, NS, Tradier, Usage
@@ -94,6 +95,9 @@ def connection_read(state: State) -> ConnectionRead:
         )
     elif config.credentials is None:
         mode, detail = "no key", "Enter the API access token in Settings."
+    elif config.on_sandbox:
+        refused = known.detail if known is not None and not known.answered else ""
+        mode, detail = "sandbox", "; ".join(filter(None, (SANDBOX_SAID, refused)))
     elif known is None:
         mode, detail = "live", "Not asked yet: Tradier is asked when the token is saved."
     else:
@@ -102,8 +106,12 @@ def connection_read(state: State) -> ConnectionRead:
     real_time = bool(known and known.real_time)
     feeds = [
         FeedRead("history", "Daily history, every exchange", answered),
-        FeedRead("quotes", "Quotes, every exchange, in real time", answered and real_time),
+        FeedRead("quotes", "Quotes, every exchange, delayed 15 minutes", answered)
+        if config.on_sandbox
+        else FeedRead("quotes", "Quotes, every exchange, in real time", answered and real_time),
     ]
+    # The sandbox does not stream: there is no session to show.
+    streams = state.streamer is not None and not config.on_sandbox
     return ConnectionRead(
         mode=mode,
         token_set=config.token_set,
@@ -119,7 +127,7 @@ def connection_read(state: State) -> ConnectionRead:
         last_call_at=_when(usage.last_call_at_ns),
         last_status=usage.last_status,
         last_error=usage.last_error or (state.lake.last_error if state.lake else ""),
-        sessions=[session_read(state)] if state.streamer is not None else [],
+        sessions=[session_read(state)] if streams else [],
     )
 
 
@@ -145,9 +153,26 @@ SERVES = {
 }
 
 
+def host(state: State) -> str:
+    """The host Tradier is asked at, or none: synthetic mode asks none, and
+    there is no client while there is no token."""
+    if state.config.synthetic or state.tradier is None:
+        return ""
+    return urllib.parse.urlparse(state.tradier.base).hostname or ""
+
+
+def feed_of(state: State) -> str:
+    """What each dataset is fed from: consolidated, at the host asked, and
+    delayed on the sandbox."""
+    asked = host(state)
+    delayed = ", delayed" if state.config.on_sandbox else ""
+    return f"consolidated{delayed}, {asked}" if asked else "consolidated"
+
+
 def datasets_read(state: State) -> DatasetsRead:
     lake = state.lake
     connection = connection_read(state)
+    feed = feed_of(state)
     rows: list[DatasetRead] = []
     for declared in CATALOGUE:
         counts = lake.counts[declared.key] if lake is not None else None
@@ -156,7 +181,7 @@ def datasets_read(state: State) -> DatasetsRead:
                 dataset=lake.dataset(declared.key) if lake is not None else declared.key,
                 key=declared.key,
                 serves=SERVES.get(declared.key, declared.key),
-                feed="consolidated",
+                feed=feed,
                 modes=[_mode(m) for m in declared.modes],
                 cadence_seconds=declared.cadence,
                 kept_by_default=bool(declared.licence_default and declared.licence_default.kept),
@@ -166,7 +191,9 @@ def datasets_read(state: State) -> DatasetsRead:
                 personal_use=bool(
                     declared.licence_default and declared.licence_default.personal_use
                 ),
-                entitled=connection.answered,
+                # The sandbox does not stream, and trades are only streamed.
+                entitled=connection.answered
+                and not (declared.key == TRADES and state.config.on_sandbox),
                 recorded=counts.recorded if counts else 0,
                 restated=counts.restated if counts else 0,
                 unchanged=counts.unchanged if counts else 0,
@@ -211,9 +238,11 @@ def _asks(data_type: str, kinds: tuple[str, ...]) -> str:
     return "quotes" if data_type == QUOTE else "trades"
 
 
-def _stream_row(sessions: list[SessionRead]) -> dict[str, str]:
+def _stream_row(sessions: list[SessionRead], sandbox: bool = False) -> dict[str, str]:
     """The stream, one line: its state, what it streams, and its reconnects,
     each a gap Tradier's history cannot fill."""
+    if sandbox:
+        return {"what": "Stream", "value": "None", "note": SANDBOX_SAID}
     if not sessions:
         return {"what": "Stream", "value": "Not started", "note": ""}
     held = sessions[0]
@@ -260,7 +289,8 @@ def _yes(flag: bool) -> dict[str, str]:
     name="read_connection",
     description=(
         "The plugin's connection to Tradier: whether the access token is set (never its "
-        "value) and whether Tradier answers it, whether its quotes are real time, Tradier's "
+        "value) and whether Tradier answers it, whether its quotes are real time (mode "
+        "`sandbox`: Tradier's developer sandbox, delayed 15 minutes, no stream), Tradier's "
         "rate limit and what this process has spent of it, the last error, and the "
         "stream's session (its state, the listings streamed, its reconnects). No market data."
     ),
@@ -296,7 +326,7 @@ async def connection(request: meridian.Request) -> meridian.Response:
             "note": f"HTTP {read.last_status}" if read.last_status else "",
         },
         {"what": "Last error", "value": read.last_error or "None", "note": ""},
-        _stream_row(read.sessions),
+        _stream_row(read.sessions, sandbox=read.mode == "sandbox"),
     ]
     return pages.answer(
         "connection.html",
@@ -305,6 +335,7 @@ async def connection(request: meridian.Request) -> meridian.Response:
         key_rows=key_rows,
         use_rows=use_rows,
         feeds={"daily": read.daily_feed, "live": read.live_feed},
+        streamed=read.mode != "sandbox",
     )
 
 
@@ -316,7 +347,8 @@ async def connection(request: meridian.Request) -> meridian.Response:
     name="read_datasets",
     description=(
         "The datasets the plugin serves the lake: each one's catalogue entry (what it "
-        "serves, how rows arrive, its default terms), whether the token is answered for it "
+        "serves, its feed with the host Tradier is asked at, how rows arrive, its default "
+        "terms), whether the token is answered for it "
         "at Tradier, and what it recorded, restated, withdrew and declined since the "
         "plugin started; the standing wants it keeps current and streams; the listings it has "
         "served. No prices, trades or quotes."
@@ -349,7 +381,7 @@ async def datasets(request: meridian.Request) -> meridian.Response:
     ]
     columns = [
         {"key": "dataset", "label": "Dataset", "strong": True, "priority": 1, "width": "7.5rem"},
-        {"key": "feed", "label": "Feed", "priority": 3, "width": "7.5rem"},
+        {"key": "feed", "label": "Feed", "priority": 3, "width": "14rem"},
         {"key": "modes", "label": "Arrives", "priority": 3, "width": "7rem"},
         {"key": "terms", "label": "Default terms", "priority": 3, "width": "9rem"},
         {

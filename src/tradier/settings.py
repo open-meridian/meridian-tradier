@@ -9,6 +9,10 @@ back, displayed, logged, reported or kept. It reaches this process in
 repr; vendor.py sends it as a bearer token and keeps it in no raw record;
 the Connection page says whether it is set, never what it is.
 
+`sandbox`, off by default, asks Tradier's developer sandbox
+(sandbox.tradier.com) instead, with a developer sandbox token in the token's
+place: for testing, its data delayed 15 minutes, and no stream.
+
 `synthetic`, a developer's setting (shown only on a development deployment),
 serves the built-in synthetic exchange (synthetic.py) instead of calling
 Tradier, with no token: what the e2e and a first look use.
@@ -22,7 +26,10 @@ from dataclasses import dataclass, field
 import meridian
 
 TOKEN = "tradier_access_token"
+SANDBOX = "sandbox"
 SYNTHETIC = "synthetic"
+#: What the plugin says of the sandbox, plainly, wherever it says which host.
+SANDBOX_SAID = "Tradier's developer sandbox: delayed 15 minutes, no streaming"
 
 DECLARED: tuple[meridian.Setting, ...] = (
     meridian.Setting(
@@ -33,7 +40,19 @@ DECLARED: tuple[meridian.Setting, ...] = (
         label="API access token",
         description=(
             "From your Tradier Brokerage account's API settings page. A personal "
-            "token does not expire."
+            "token does not expire. With Tradier's developer sandbox on, a developer "
+            "sandbox token instead."
+        ),
+    ),
+    meridian.Setting(
+        SANDBOX,
+        bool,
+        default=False,
+        label="Tradier's developer sandbox",
+        description=(
+            "For testing with a developer sandbox token: asks sandbox.tradier.com, whose "
+            "data is delayed 15 minutes and which does not stream. A live brokerage token "
+            "leaves it off."
         ),
     ),
     meridian.Setting(
@@ -73,11 +92,18 @@ class Credentials:
 @dataclass(frozen=True)
 class Config:
     """The settings as the plugin uses them: the token, if given, whether it
-    is set (never its value), and synthetic mode."""
+    is set (never its value), the sandbox, and synthetic mode."""
 
     credentials: Credentials | None = None
     token_set: bool = False
+    sandbox: bool = False
     synthetic: bool = False
+
+    @property
+    def on_sandbox(self) -> bool:
+        """Whether Tradier's developer sandbox is asked: synthetic mode asks
+        nothing, so it wins."""
+        return self.sandbox and not self.synthetic
 
     @property
     def ready(self) -> bool:
@@ -91,5 +117,6 @@ def config_from(values: Mapping[str, object]) -> Config:
     return Config(
         credentials=Credentials(token) if token else None,
         token_set=bool(token),
+        sandbox=values.get(SANDBOX) is True,
         synthetic=values.get(SYNTHETIC) is True,
     )
