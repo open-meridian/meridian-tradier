@@ -3,9 +3,11 @@ file: for looking at the pages without a deployment.
 
     python -m tradier.preview datasets > preview/datasets.html
 
-The page is `connection` (the default), `datasets` or `connection-no-key`.
+The page is `connection` (the default) or `datasets`, on sample data; or
+either with no token (`-no-key`), or with the sandbox chosen and no token
+(`-sandbox-no-key`): the role's "not set up yet" states.
 Each is served by its own view, as the sidecar would ask it, over the
-built-in synthetic exchange: a week of closes recorded for the exchange's
+built-in recorded exchange: a week of closes recorded for the exchange's
 listings, a cycle of the synthetic stream's trades and quotes, standing
 wants kept current and streamed (enough of them to page and search), and a
 venue not held. It links
@@ -95,26 +97,29 @@ def synthetic_state(root: Path) -> State:
     held.state, held.subscribed = "streaming", len(lake.streamed)
     held.opened, held.reconnects, held.messages, held.since_ns = 2, 1, 7, NOW
     return State(
-        config=Config(synthetic=True), lake=lake, source=source, tradier=tradier, streamer=streamer
+        config=Config(sample_data=True),
+        lake=lake,
+        source=source,
+        tradier=tradier,
+        streamer=streamer,
     )
 
 
 def main(argv: list[str]) -> int:
     tab = argv[0] if argv else "connection"
+    paths = {"connection": CONNECTION, "datasets": DATASETS}
+    page, _, empty = tab.partition("-")
+    path = paths.get(page)
+    if path is None or empty not in ("", "no-key", "sandbox-no-key"):
+        print(f"no page {tab!r}: connection or datasets, -no-key, -sandbox-no-key", file=sys.stderr)
+        return 2
     with tempfile.TemporaryDirectory() as held:
-        path: str | None
-        if tab == "connection-no-key":
+        if empty == "sandbox-no-key":
+            use(State(config=Config(environment="sandbox")))
+        elif empty == "no-key":
             use(State())
-            path = CONNECTION
         else:
             use(synthetic_state(Path(held)))
-            path = {"connection": CONNECTION, "datasets": DATASETS}.get(tab)
-            if path is None:
-                print(
-                    f"no page {tab!r}: connection, datasets or connection-no-key", file=sys.stderr
-                )
-                return 2
-        assert path is not None
         answer = PageClient(pages).get(path, "admin")
         sys.stdout.write(answer.text)
     return 0 if answer.status == 200 else 1

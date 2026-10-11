@@ -1,21 +1,21 @@
-"""The `dgm` suite, the SDK's own (meridian.suites, contract v19), run unchanged
+"""The data suite, the SDK's own (meridian.suites, contract v20), run unchanged
 against this plugin: every case mapped to the plugin's own conversion, from
-Tradier's synthetic exchange and stream, through the lake's half it runs in
+Tradier's recorded exchange and stream, through the lake's half it runs in
 production (lake.py), against the suite's `Recorder`.
 
-Five cases are not presented, each with why (`NOT_PRESENTED`), as the suite
-lets a case about a kind of data (`about`) go unpresented from contract
-v19. Two are about kinds Tradier's US stock data never publishes: a
-currency's rate against another currency, and a crypto asset's price. Three
-are about trades, which it does publish, but each asks for what Tradier's
-time and sales never state: the side that took liquidity (a regular trade
-with its aggressor, and a maker's side inverted), and an odd lot, which
-Tradier's flags may say but Tradier does not document, so its flags are
-kept as reported rather than converted. The contract records no aggressor it
-is not told (`Trade.aggressor`: never guessed), so neither aggressor case
-can be presented without inventing one; this stretches `about`, whose kind
-is trades, and is raised with the lake's plan. The trade's attributes those
-cases also check are proven in test_trades.py.
+Six cases are not presented, each with why (`NOT_PRESENTED`). Two are about
+kinds of data Tradier's US stock data never publishes (`about`, from
+contract v19): a currency's rate against another currency, and a crypto
+asset's price. Three are about a field its time and sales never state
+(`about_field`, from contract v20): the side that took liquidity
+(`meridian.v1.Trade.aggressor`) -- the taker's side, and a maker's side
+inverted -- and an odd lot (`meridian.v1.TradeAttributes.characteristics`),
+which Tradier's flags may say but Tradier does not document, so its flags
+are kept as reported rather than converted. And a restart's gap, backfilled
+(`a-restarts-gap-backfilled`, about trades): Tradier's time and sales
+history names no print by its sequence number, which a streamed trade's row
+is keyed by, so reading it after a restart would record trades twice; the
+gap is said on the Datasets page rather than filled.
 """
 
 from __future__ import annotations
@@ -58,10 +58,14 @@ Producer = Callable[[Recorder], Awaitable[None]]
 #: The cases Tradier's stock data does not present, and why (above).
 NOT_PRESENTED = {
     "an-fx-rate": "Tradier's US stock data states no currency's rate against another",
-    "a-stablecoin-quote": "a dgm of US stocks: Tradier states no crypto asset's price",
-    "a-trade-recorded": "Tradier's time and sales never state which side took liquidity",
+    "a-stablecoin-quote": "a data plugin of US stocks: Tradier states no crypto asset's price",
+    "the-takers-side-stated": "Tradier's time and sales never state which side took liquidity",
     "the-makers-side-inverted": "Tradier's time and sales state neither side of a trade",
     "a-condition-converted": "Tradier documents no flag for an odd lot: its flags are as reported",
+    "a-restarts-gap-backfilled": (
+        "Tradier's time and sales history names no print by its sequence number, which a "
+        "streamed trade is keyed by: read after a restart, it would record trades twice"
+    ),
 }
 
 #: A moment in the session, for the stream's events: epoch milliseconds.
@@ -208,6 +212,21 @@ def producers(tmp: Path) -> dict[str, Producer]:
     async def declined(recorder: Recorder) -> None:
         await wanted(recorder, want(ISIN_ONLY, business_date=DAY))
 
+    async def licences(recorder: Recorder) -> None:
+        # On start, its own declared datasets' licences (contract v20).
+        from tradier.__main__ import read_licences
+        from tradier.page import State
+
+        recorder.answer(
+            "ListDatasets",
+            lambda _: ops.ListDatasetsResult(
+                licences=[ops.DatasetLicence(dataset="suite-plugin:daily", kept=True)]
+            ),
+        )
+        state = State()
+        await read_licences(recorder, state)
+        assert state.licensed == {"suite-plugin:daily"}
+
     async def withdrawn(recorder: Recorder) -> None:
         clock = Clock(AFTER)
         answer_records(recorder, RECORDS)
@@ -238,13 +257,15 @@ def producers(tmp: Path) -> dict[str, Producer]:
         "a-quote-recorded": quote,
         "a-one-sided-quote": one_sided,
         "a-standing-want-streamed": standing_streamed,
+        "a-trade-recorded": standing_streamed,
+        "reads-its-datasets-licences": licences,
     }
 
 
-def test_the_dgm_suite_passes_unchanged(tmp_path: Path) -> None:
-    report = run("dgm", producers(tmp_path), not_presented=NOT_PRESENTED)
+def test_the_data_suite_passes_unchanged(tmp_path: Path) -> None:
+    report = run("data", producers(tmp_path), not_presented=NOT_PRESENTED)
     assert report.passed, report.failures
-    assert len(report.passed_cases) == 16
+    assert len(report.passed_cases) == 18
     assert sorted(report.not_presented) == sorted(NOT_PRESENTED)
 
 
@@ -254,5 +275,5 @@ def test_a_price_read_through_a_float_fails_the_suite(tmp_path: Path, restore_pa
     import tradier.vendor as vendor
 
     vendor.parse = lambda text: json.loads(text, parse_float=float)
-    report = run("dgm", producers(tmp_path), not_presented=NOT_PRESENTED)
+    report = run("data", producers(tmp_path), not_presented=NOT_PRESENTED)
     assert "an-exact-price" in report.failures, report.failures

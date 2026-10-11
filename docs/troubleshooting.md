@@ -2,10 +2,10 @@
 
 | You see | It means | Do |
 |---|---|---|
-| Connection: **No key** | No access token is set | Enter it in Settings |
+| Connection: **No key yet** | No token is set for the environment chosen | Enter it in Settings (the link) |
 | Connection: **Not answering** | Tradier refused the token | Check it on your Tradier account's API settings page, or create a new one and enter it |
-| Quotes **delayed** | **Tradier's developer sandbox** is on in Settings, or the account is not entitled to real time | Turn the sandbox off and enter your brokerage account's token |
-| Connection: **Sandbox**, Stream: **None** | **Tradier's developer sandbox** is on: delayed 15 minutes, no streaming | Nothing, while testing; for live data turn it off and enter your brokerage token |
+| Quotes **delayed** | The Environment is **Sandbox** in Settings, or the account is not entitled to real time | Choose Live and enter your brokerage account's token |
+| Connection: **Sandbox**, Stream: **Does not stream** | The Environment is **Sandbox**: delayed 15 minutes, no streaming | Nothing, while testing; for live data choose Live and enter your brokerage token |
 | Datasets: **declined** grows | A reader asked for a listing the plugin cannot name to Tradier, or a day with no session | See the Datasets page's note; a weekend or holiday has no close |
 | Datasets: **unconverted** grows | Tradier sent a value the contract cannot hold exactly | Nothing is recorded for it; the raw response is kept |
 | A last price with **no venue** | Your deployment does not hold the exchange Tradier named yet | It is reported to the platform, and named once the venue is held |
@@ -13,3 +13,4 @@
 | Stream: **Refused** | Tradier refused the token when the plugin asked for a streaming session | Check the token |
 | Stream: **reconnects** grow | The stream dropped; each reconnect is a gap not filled | Nothing to do; if it is constant, check the network |
 | Datasets: trades **unconverted** grows | Tradier sent a flag the plugin does not convert (Tradier documents none) | Those trades' eligibilities are not known; the flag is kept as reported |
+| Datasets: **Not licensed yet** | No deployment admin has licensed the dataset | Ask a deployment admin to license it on Data sources; the page says so within a minute |

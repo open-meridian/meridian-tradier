@@ -9,13 +9,26 @@ back, displayed, logged, reported or kept. It reaches this process in
 repr; vendor.py sends it as a bearer token and keeps it in no raw record;
 the Connection page says whether it is set, never what it is.
 
-`sandbox`, off by default, asks Tradier's developer sandbox
-(sandbox.tradier.com) instead, with a developer sandbox token in the token's
-place: for testing, its data delayed 15 minutes, and no stream.
+The data role's common settings, in its order
+(spec/plugin-pages-follow-their-role, Q12 as amended 2026-10-10):
 
-`synthetic`, a developer's setting (shown only on a development deployment),
-serves the built-in synthetic exchange (synthetic.py) instead of calling
-Tradier, with no token: what the e2e and a first look use.
+- `environment` first, a required choice (`meridian.environment`): `live`,
+  Tradier's API with a brokerage account's token, or `sandbox`, Tradier's
+  developer sandbox (sandbox.tradier.com), for testing, its data delayed 15
+  minutes and with no stream. Before 0.3.0, `sandbox`, a switch.
+- the token, one required secret, `tradier_access_token`, for whichever
+  environment is chosen: the brokerage account's API access token on
+  `live`, a developer sandbox token on `sandbox` (the product owner,
+  2026-10-11, option B: one token, so which source a dataset comes from is
+  never in doubt). Its value carries over from 0.2.x unchanged. The
+  plugin's own pages name it by the environment -- "API access token" or
+  "Sandbox access token" -- and say which environment the data comes from;
+  core's Settings form shows the one label the declaration carries, a
+  neutral "Access token", so it never names the wrong environment.
+- `sample_data`, a developer's setting (`meridian.sample_data`, shown
+  only on a development deployment), serving the built-in recorded exchange
+  (synthetic.py) instead of calling Tradier, with no token: what the e2e
+  and a first look use.
 """
 
 from __future__ import annotations
@@ -25,48 +38,41 @@ from dataclasses import dataclass, field
 
 import meridian
 
+ENVIRONMENT = "environment"
+LIVE, SANDBOX = "live", "sandbox"
 TOKEN = "tradier_access_token"
-SANDBOX = "sandbox"
-SYNTHETIC = "synthetic"
+SAMPLE_DATA = "sample_data"
 #: What the plugin says of the sandbox, plainly, wherever it says which host.
 SANDBOX_SAID = "Tradier's developer sandbox: delayed 15 minutes, no streaming"
 
-DECLARED: tuple[meridian.Setting, ...] = (
-    meridian.Setting(
-        TOKEN,
-        str,
+
+@meridian.settings
+class Declared:
+    """The settings as declared, in the data role's order: one typed class,
+    the SDK's form, which `connect` and the declaration register."""
+
+    environment: str = meridian.environment(
+        description=(
+            "Live: Tradier's API, with a Tradier Brokerage account's token. Sandbox: "
+            "Tradier's developer sandbox, for testing, its data delayed 15 minutes and "
+            "not streamed."
+        )
+    )
+    tradier_access_token: str = meridian.setting(
+        "Access token",
         required=True,
         secret=True,
-        label="API access token",
         description=(
-            "From your Tradier Brokerage account's API settings page. A personal "
-            "token does not expire. With Tradier's developer sandbox on, a developer "
-            "sandbox token instead."
+            "Your Tradier API access token for Live, or a developer sandbox token for "
+            "Sandbox: it must match Environment."
         ),
-    ),
-    meridian.Setting(
-        SANDBOX,
-        bool,
-        default=False,
-        label="Tradier's developer sandbox",
-        description=(
-            "For testing with a developer sandbox token: asks sandbox.tradier.com, whose "
-            "data is delayed 15 minutes and which does not stream. A live brokerage token "
-            "leaves it off."
-        ),
-    ),
-    meridian.Setting(
-        SYNTHETIC,
-        bool,
-        default=False,
-        developer=True,
-        label="Synthetic",
-        description=(
-            "Serve the built-in synthetic Tradier responses instead of calling Tradier, "
-            "with no token. For development and tests only."
-        ),
-    ),
-)
+    )
+    sample_data: bool = meridian.sample_data()
+
+
+DECLARED = Declared
+#: Each setting it declares, in its order.
+SETTINGS: tuple[meridian.Setting, ...] = Declared.declared()  # type: ignore[attr-defined]
 
 
 @dataclass(frozen=True)
@@ -91,32 +97,34 @@ class Credentials:
 
 @dataclass(frozen=True)
 class Config:
-    """The settings as the plugin uses them: the token, if given, whether it
-    is set (never its value), the sandbox, and synthetic mode."""
+    """The settings as the plugin uses them: the environment, the token, if
+    given, whether it is set (never its value), and sample data."""
 
     credentials: Credentials | None = None
     token_set: bool = False
-    sandbox: bool = False
-    synthetic: bool = False
+    environment: str = LIVE
+    sample_data: bool = False
 
     @property
     def on_sandbox(self) -> bool:
-        """Whether Tradier's developer sandbox is asked: synthetic mode asks
+        """Whether Tradier's developer sandbox is asked: sample data asks
         nothing, so it wins."""
-        return self.sandbox and not self.synthetic
+        return self.environment == SANDBOX and not self.sample_data
 
     @property
     def ready(self) -> bool:
-        """Whether there is something to ask: synthetic, or the token."""
-        return self.synthetic or self.credentials is not None
+        """Whether there is something to ask: sample data, or the token."""
+        return self.sample_data or self.credentials is not None
 
 
 def config_from(values: Mapping[str, object]) -> Config:
-    """The settings as delivered, typed."""
+    """The settings as delivered, typed: the one token, for the environment
+    chosen."""
+    environment = SANDBOX if values.get(ENVIRONMENT) == SANDBOX else LIVE
     token = str(values.get(TOKEN) or "")
     return Config(
         credentials=Credentials(token) if token else None,
         token_set=bool(token),
-        sandbox=values.get(SANDBOX) is True,
-        synthetic=values.get(SYNTHETIC) is True,
+        environment=environment,
+        sample_data=values.get(SAMPLE_DATA) is True,
     )

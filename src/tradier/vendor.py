@@ -36,6 +36,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import deque
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -46,7 +47,7 @@ from .settings import Credentials
 
 API = "https://api.tradier.com/v1"
 SANDBOX = "https://sandbox.tradier.com/v1"
-USER_AGENT = "meridian-tradier/0.2.1 (+https://open-meridian.dev)"
+USER_AGENT = "meridian-tradier/0.3.0 (+https://open-meridian.dev)"
 #: Tradier's market data over WebSocket, for a session made by REST.
 STREAM = "wss://ws.tradier.com/v1/markets/events"
 NS = 1_000_000_000
@@ -181,6 +182,14 @@ class Usage:
     last_status: int = 0
     last_error: str = ""
     by_call: dict[str, int] = field(default_factory=dict)
+    #: When each call of the last minute was made, for "Rate use".
+    recent: deque[int] = field(default_factory=deque)
+
+    def last_minute(self, now_ns: int) -> int:
+        """How many calls were made in the minute before `now_ns`."""
+        while self.recent and self.recent[0] < now_ns - 60 * NS:
+            self.recent.popleft()
+        return len(self.recent)
 
 
 class Tradier:
@@ -253,6 +262,8 @@ class Tradier:
             self.usage.by_call[call] = self.usage.by_call.get(call, 0) + 1
             answer = (self.poster if method == "POST" else self.transport)(url, headers)
             received = self.clock_ns()
+            self.usage.recent.append(received)
+            self.usage.last_minute(received)
             self.usage.last_call_at_ns, self.usage.last_status = received, answer.status
             said = self._redacted(answer.body.decode("utf-8", errors="replace"))
             text = hide(said)

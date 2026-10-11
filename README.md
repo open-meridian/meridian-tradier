@@ -1,18 +1,19 @@
 # meridian-tradier
 
 Tradier's US equity and ETF market data in an [Open Meridian](https://open-meridian.dev)
-deployment, as a `dgm` plugin: daily closes and bars, live prices and
+deployment, as a data plugin (the `data` role): daily closes and bars, live prices and
 quotes, and its time and sales as trades, put into the deployment's lake for
 the plugins that value and show a book.
 
 It is the second half of the retail pair, beside
 [meridian-alpaca](https://github.com/open-meridian/meridian-alpaca): both
 pass the same suite of the SDK, unchanged. Tradier is also a broker; this
-repository is named for the vendor so that a `custody` or `ccm` role can
+repository is named for the vendor so that a `custody` or `connectivity` role can
 arrive here later without a rename.
 
-**Status:** 0.2.1, on open-meridian 0.23.0 (contract 19), proven against core
-e149c69's runtime and plugin harness. Not released.
+**Status:** 0.3.0, on open-meridian 0.24.0 (contract 20), proven locally
+against core v20's runtime and plugin harness, neither released yet. Not
+released.
 
 ## What it serves
 
@@ -67,17 +68,22 @@ e149c69's runtime and plugin harness. Not released.
   and not sent.
 - **Reconnect.** A stream that breaks is opened again with a new session, a
   second later and then doubling to a minute, and subscribed again from
-  what is wanted. A process started anew streams nothing until the lake
-  asks for a want again: contract v19 gives a dgm no way to read the
-  standing wants back. The gap between two sessions is not filled: Tradier's time and sales
-  history names no print by its sequence number, so reading it again would
-  record trades twice. Each reconnect is counted on the Connection page.
+  what is wanted. The gap between two sessions is not filled: Tradier's
+  time and sales history names no print by its sequence number, so reading
+  it again would record trades twice. Each reconnect is counted on the
+  Connection page.
+- **A restart's gap is not backfilled** either (contract v20 has a data
+  plugin backfill a restart's gap from its source's history where the
+  history allows): the lake delivers each standing want again to a plugin
+  started anew and it streams again, but what was traded while it was
+  stopped is not read, for the same reason. Datasets says so.
 - **Streamed only:** a reader's range of trades is not Tradier's to answer,
   for the same reason, and is declined, not covered.
-- **The suite.** Five of its cases are not presented, each with why: a
+- **The suite.** Six of its cases are not presented, each with why: a
   currency's rate and a crypto asset's price (kinds Tradier's stock data never
-  publishes), the two that ask for the side that took liquidity, which
-  Tradier never states, and an odd lot, which no documented flag says.
+  publishes), the two about the side that took liquidity (a field,
+  `Trade.aggressor`, Tradier never states), an odd lot (a characteristic no
+  documented flag says), and a restart's gap backfilled (above).
 
 **Instruments another source named.** The lake asks for a price by the
 deployment's own instrument ID. An instrument known to the deployment only
@@ -85,7 +91,7 @@ by another source's identifiers -- a custodian's symbol and CUSIP, as the
 book holds it -- is read from its record, priced under the listing's one
 spelling, and Tradier's symbol is added to the record. Only a record
 carrying no symbol is declined, not covered. On a runtime from before
-contract 18 let a `dgm` read an instrument's record, such an instrument is
+contract 18 let a data plugin read an instrument's record, such an instrument is
 declined, and the Datasets page says why.
 
 ## Tradier's terms, summarised
@@ -115,16 +121,25 @@ for an individual it does not expire.
 1. In your Tradier Brokerage account, open the **API** settings page and copy
    your access token.
 2. In the deployment, open the plugin under **Manage**, then **Settings**.
-3. Enter the **API access token**. It is a secret setting: once saved it is
-   never shown again, logged, put on a page or sent anywhere but Tradier.
-   Leave **Tradier's developer sandbox** off: it is for testing with a
-   developer sandbox token instead, and then the plugin asks
-   `sandbox.tradier.com`, whose data is delayed 15 minutes and which does
-   not stream; live prices are still kept current once a minute.
-4. Open **Connection**: it says whether the token is set (never its value),
-   whether Tradier answered, and whether its quotes are real time; with the
-   sandbox on, "Tradier's developer sandbox: delayed 15 minutes, no
-   streaming". **Datasets** names the host asked.
+3. Choose the **Environment**, the first setting: **Live**, Tradier's API
+   with your brokerage account's token, or **Sandbox**, Tradier's developer
+   sandbox (`sandbox.tradier.com`), for testing, whose data is delayed 15
+   minutes and which does not stream; live prices are still kept current
+   once a minute. Then the one token, for the environment chosen: your
+   brokerage account's API access token on Live, a developer sandbox token
+   on Sandbox. The plugin's pages name it by the environment ("API access
+   token" or "Sandbox access token") and say which environment the data
+   comes from; the Settings form calls it **Access token**, saying it must
+   match Environment. It is a secret setting: once saved it is never shown again,
+   logged, put on a page or sent anywhere but Tradier. Until 0.3.0 the
+   sandbox was a switch, `sandbox`; a deployment that had it on chooses
+   Sandbox, and its token carries over, nothing re-entered.
+4. Open **Connection**: under **Key** it says the mode (Live or Sandbox),
+   whether the token is set (never its value), whether Tradier answered,
+   and whether its quotes are real time; on the sandbox, "Tradier's
+   developer sandbox: delayed 15 minutes, no streaming", and **Stream**
+   says "Does not stream". With no token, "No key yet", linking to
+   Settings. **Datasets** names the host asked.
 5. On the deployment's **Data sources** page, license `daily`, `live` and
    `trades`,
    and entitle the plugins that read prices.
@@ -145,16 +160,17 @@ own machine; CI never runs it.
 2. `make e2e-recorded RECORDED=recordings/<when>` replays that recording
    through the e2e on core's plugin harness.
 3. On a development deployment, with the plugin launched and the token
-   entered (above): Connection says **Connected**, quotes real time; after a
+   entered (above): Connection's Mode says **Live**, the Summary's
+   Connection figure **Answering**, quotes real time; after a
    reader asks for a close, Datasets counts it recorded; after a reader asks
    for a listing's latest quote, Connection's **Stream** says it streams that
    listing, and Datasets counts its trades and quotes.
 
 ## Building it
 
-    make ci-local        lint, the tests (the SDK's dgm suite among them), meridian plugin check, the image, and the e2e
-    make e2e             the plugin on core's plugin harness, synthetic, with no token (e2e/run.py)
-    make preview         the pages on synthetic data, for a browser beside the kit
+    make ci-local        lint, the tests (the SDK's data suite among them), meridian plugin check, the image, and the e2e
+    make e2e             the plugin on core's plugin harness, on sample data, with no token (e2e/run.py)
+    make preview         the pages on sample data, for a browser beside the kit
     make install-hooks   push runs ci-local first
 
 Everything runs in containers; the host needs Docker and Python 3 for the

@@ -41,7 +41,7 @@ def synthetic_state(tmp: Path) -> State:
     streamer.session.state, streamer.session.subscribed = "streaming", 1
     streamer.session.reconnects = 2
     return State(
-        config=Config(synthetic=True),
+        config=Config(sample_data=True),
         lake=lake,
         source=lake.source,  # type: ignore[arg-type]
         tradier=lake.source.tradier,  # type: ignore[attr-defined]
@@ -64,34 +64,59 @@ def test_each_page_serves_manage_alone(client: PageClient) -> None:
 
 def test_the_connection_page_and_its_tool_read_one_source(client: PageClient) -> None:
     page = client.get(CONNECTION, "admin").text
-    assert "Synthetic" in page and "Token and data" in page and "60 a minute" in page
+    # The data role's sections, in its order, with Tradier's rows at its blocks.
+    assert page.index("<h2>Key</h2>") < page.index("<h2>Limits and use</h2>")
+    assert page.index("<h2>Limits and use</h2>") < page.index("<h2>Stream</h2>")
+    assert "Sample data" in page and "60 a minute" in page and "Not entitled" in page
     answer = client.call_tool("read_connection")
     assert answer.status == 200 and answer.outcome == "unchanged"
     data = answer.data
-    assert data["mode"] == "synthetic" and data["daily_feed"] == "history"
-    assert data["limit_per_minute"] == 60 and data["vendor_limit_per_minute"] == 120
-    (session,) = data["sessions"]
-    assert session["state"] == "streaming" and session["subscribed"] == 1
-    assert session["reconnects"] == 2 and "each a gap not caught up" in page
+    assert data["mode"] == "Sample data" and data["environment"] == "live"
+    assert [c["label"] for c in data["credentials"]] == ["API access token"]
+    assert data["limit"].startswith("60 a minute") and data["sessions"] == 1
+    assert data["stream"]["state"] == "streaming" and data["stream"]["subscribed"] == 1
+    assert data["stream"]["reconnects"] == 2 and "a gap Tradier&#39;s history" in page
 
 
 def test_the_datasets_page_and_its_tool_read_one_source(client: PageClient) -> None:
     page = client.get(DATASETS, "admin").text
-    assert "tradier-1:daily" in page and "tradier-1:live" in page and "SPY" in page
+    assert "tradier-1:daily" in page and "tradier-1:live" in page
+    assert page.index("<h2>Served</h2>") < page.index("<h2>Wants</h2>")
+    assert page.index("<h2>Subjects</h2>") < page.index("<h2>Kept current</h2>")
     data = client.call_tool("read_datasets").data
-    daily = next(d for d in data["datasets"] if d["key"] == "daily")
-    assert daily["recorded"] == 1 and daily["personal_use"] is True
-    assert daily["kept_by_default"] is True and daily["modes"] == ["pull", "push"]
-    live = next(d for d in data["datasets"] if d["key"] == "live")
-    assert live["kept_by_default"] is False and live["modes"] == ["pull", "stream"]
-    assert data["standing"][0]["symbols"] == ["SPY"] and data["listings"] == 1
-    trades = next(d for d in data["datasets"] if d["key"] == "trades")
-    assert trades["modes"] == ["stream"] and trades["kept_days"] == 2
-    assert [w["asks"] for w in data["standing"]] == ["last, bid, ask", "trades"]
-    assert all(w["streamed"] for w in data["standing"]) and data["streamed"] == 1
-    # The standing wants grow: searched beside the kit's pager.
-    assert '<om-pager search="Search standing wants">' in page and "kept 2 days" in page
-    assert "/.meridian/ui/0.11.0/" in page
+    daily = next(d for d in data["served"] if d["key"] == "daily")
+    assert daily["recorded"] == 1 and daily["arrives"] == "pull, push"
+    assert daily["default_terms"] == "kept; personal use" and daily["licensed"] is False
+    live = next(d for d in data["served"] if d["key"] == "live")
+    assert live["default_terms"] == "served, not kept; personal use"
+    trades = next(d for d in data["served"] if d["key"] == "trades")
+    assert trades["arrives"] == "stream" and trades["default_terms"].startswith("kept 2")
+    assert [w["asked"] for w in data["wants"]] == ["trades", "last, bid, ask"]
+    assert data["wants"][0]["listings"] == ["SPY"] and data["wants"][0]["streamed"]
+    assert data["listings"] == 1 and data["streamed"] == 1
+    assert data["backfills_a_restart"] is False and "/.meridian/ui/0.12.0/" in page
+
+
+def test_a_licensed_dataset_is_said_so(tmp_path: Path) -> None:
+    state = synthetic_state(tmp_path)
+    state.licensed = frozenset({"tradier-1:live"})
+    use(state)
+    served = PageClient(pages).call_tool("read_datasets").data["served"]
+    assert [s["licensed"] for s in served] == [False, True, False]
+
+
+def test_the_figures_are_the_data_roles_in_its_order(tmp_path: Path) -> None:
+    from tradier.page import figures
+
+    said = figures(synthetic_state(tmp_path))
+    assert [f.label for f in said] == [
+        "Connection",
+        "Entitled at the vendor",
+        "Stream",
+        "Last recorded",
+        "Rate use",
+    ]
+    assert said[0].value == "Sample data" and said[2].value == "1 listings"
 
 
 def test_no_key_value_and_no_price_is_ever_shown(tmp_path: Path) -> None:
@@ -107,7 +132,7 @@ def test_no_key_value_and_no_price_is_ever_shown(tmp_path: Path) -> None:
     for tool in ("read_connection", "read_datasets"):
         said = str(client.call_tool(tool).json)
         assert KEY.token not in said and "573.86" not in said
-    assert client.call_tool("read_connection").data["token_set"] is True
+    assert client.call_tool("read_connection").data["credentials"][0]["set"] is True
     client.assert_no_account_data("573.86")
 
 
@@ -115,6 +140,6 @@ def test_with_no_key_the_page_says_where_to_enter_it(tmp_path: Path) -> None:
     use(State(config=Config()))
     client = PageClient(pages)
     text = client.get(CONNECTION, "admin").text
-    assert "Enter the API access token in Settings" in text
-    assert client.call_tool("read_connection").data["mode"] == "no key"
-    assert client.get(DATASETS, "admin").status == 200
+    assert "No key yet" in text and 'data-om-opens="settings"' in text
+    assert client.call_tool("read_connection").data["mode"] == "No key"
+    assert "No wants yet" in client.get(DATASETS, "admin").text

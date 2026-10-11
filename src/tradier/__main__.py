@@ -1,19 +1,23 @@
 """The Tradier plugin: Tradier's US equity and ETF market data in an Open
-Meridian deployment's lake, as a `dgm` (contract v19;
+Meridian deployment's lake, as a data plugin (contract v20;
 plans/the-lake-prices-the-book, the retail pair).
 
 It connects to the sidecar it is launched beside, declaring its catalogue,
 its settings and its storage (declaration.py) and its pages (page.py); on
 each delivery of its settings it makes its Tradier client again with the
-token (or, in synthetic mode, the built-in exchange; with `sandbox` on,
-Tradier's developer sandbox, delayed and not streamed) and asks whether
-Tradier answers it; then it hears what the lake wants of it and records against
+token for the environment chosen (or, with sample data, the built-in
+exchange; on the `sandbox` environment, Tradier's developer sandbox, delayed
+and not streamed) and asks whether Tradier answers it; it reads which of its
+datasets a deployment admin has licensed (contract v20), and reports the data
+role's figures; then it hears what the lake wants of it and records against
 each want or declines it per subject (lake.py), and keeps its timetable:
 standing wants kept current, days still forming read again, a final close
 pushed. While any standing want stands, it streams Tradier's time and sales
 and quotes for the listings wanted (stream.py), reconnecting with a new
 session when the stream breaks; on the sandbox, which does not stream, it
-opens none, and keeps live prices current as it does without a stream.
+opens none, and keeps live prices current as it does without a stream. A
+restart's gap is not backfilled: Tradier's time and sales history names no
+print by its sequence number, so reading it again would record trades twice.
 
 It holds nothing it cannot lose: what each subject's symbol is, and every
 raw response, are in the storage the deployment grants it (decisions/028);
@@ -39,7 +43,7 @@ from meridian import edge
 from .convert import spelled
 from .declaration import DECLARATION
 from .lake import Lake, Products
-from .page import TITLE, State, pages, serve
+from .page import TITLE, State, figures, pages, serve
 from .raw import RawStore, storage_root
 from .settings import DECLARED, SANDBOX_SAID, Config, config_from
 from .source import TradierSource
@@ -51,15 +55,17 @@ log = logging.getLogger("tradier")
 
 #: How often the timetable is looked at.
 TICK_SECONDS = 15
+#: How often the datasets' licences are read again.
+LICENCES_SECONDS = 60
 
 
 def source_for(
     config: Config, store: RawStore, transport: Transport = urllib_transport
 ) -> tuple[Tradier | None, TradierSource | None]:
-    """The client and the source the settings give: synthetic, the token's
+    """The client and the source the settings give: sample data, the token's
     at Tradier or at its developer sandbox, or none while there is no
     token."""
-    if config.synthetic:
+    if config.sample_data:
         tradier = Tradier(store, None, transport=SyntheticTransport(), keyless=True)
         return tradier, TradierSource(tradier, synthetic=True)
     if config.credentials is None:
@@ -72,7 +78,7 @@ def source_for(
 def feed_for(state: State, store: RawStore) -> Feed | None:
     """The stream the settings give: synthetic, Tradier's with the token, or
     none while there is no token, or on the sandbox, which does not stream."""
-    if state.config.synthetic:
+    if state.config.sample_data:
         return SyntheticFeed(store)
     if state.config.on_sandbox:
         return None
@@ -97,25 +103,48 @@ async def health(plugin: meridian.Plugin, state: State) -> None:
     """Say how the source is, on the heartbeat: a missing token or a refused
     one is the plugin's health, never a ticket."""
     config = state.config
-    if config.synthetic:
-        await plugin.report(healthy=True, detail="synthetic: the built-in exchange")
+    if config.sample_data:
+        await say(plugin, state, True, "sample data: the built-in exchange")
         return
     if state.source is None:
-        await plugin.report(healthy=False, detail="no Tradier token: enter it in Settings")
+        await say(plugin, state, False, "no Tradier token: enter it in Settings")
         return
     try:
         entitled = await asyncio.to_thread(state.source.entitlements, True)
     except (NoKey, VendorError, OSError) as failed:
-        await plugin.report(healthy=False, detail=f"Tradier did not answer: {failed}"[:200])
+        await say(plugin, state, False, f"Tradier did not answer: {failed}")
         return
     if not entitled.answered:
-        await plugin.report(healthy=False, detail=f"Tradier refused the token: {entitled.detail}")
+        await say(plugin, state, False, f"Tradier refused the token: {entitled.detail}")
         return
     if config.on_sandbox:
-        await plugin.report(healthy=True, detail=f"answering at {SANDBOX_SAID}")
+        await say(plugin, state, True, f"answering at {SANDBOX_SAID}")
         return
     timing = "real time" if entitled.real_time else "delayed"
-    await plugin.report(healthy=True, detail=f"answering; quotes {timing}, consolidated")
+    await say(plugin, state, True, f"answering; quotes {timing}, consolidated")
+
+
+async def say(plugin: meridian.Plugin, state: State, healthy: bool, detail: str) -> None:
+    """The plugin's health, with the data role's figures as they stand."""
+    await plugin.report(healthy=healthy, detail=detail[:200], figures=figures(state))
+
+
+async def read_licences(plugin: Any, state: State) -> None:
+    """Which of its own declared datasets a deployment admin has licensed
+    (contract v20, W10.9), for the Datasets page: a dataset with none is
+    served by its catalogue's default terms until one is set."""
+    answered = await plugin.list_datasets()
+    state.licensed = frozenset(licence.dataset for licence in answered.licences)
+
+
+async def licences(plugin: meridian.Plugin, state: State) -> None:
+    """The licences, read on start and every minute."""
+    while True:
+        try:
+            await read_licences(plugin, state)
+        except meridian.MeridianError as failed:
+            log.warning("the datasets' licences were not read this time: %s", failed)
+        await asyncio.sleep(LICENCES_SECONDS)
 
 
 async def watch_settings(
@@ -127,7 +156,7 @@ async def watch_settings(
         if state.lake is not None:
             state.lake.source = state.source
             state.lake.streaming = not state.config.on_sandbox
-            if state.config.synthetic:
+            if state.config.sample_data:
                 # The built-in exchange's listings, as a source's own list.
                 await state.lake.seed(sorted(spelled(s) or s for s in exchange()["history"]))
         configured.set()
@@ -138,12 +167,14 @@ async def watch_settings(
             state.streamer.restart()
 
 
-async def timetable(lake: Lake) -> None:
+async def timetable(plugin: meridian.Plugin, state: State, lake: Lake) -> None:
     while True:
         try:
             await lake.tick()
         except meridian.MeridianError as failed:
             log.warning("the timetable stopped this time: %s", failed)
+        # The figures go on the next heartbeat.
+        plugin.figures = figures(state)
         await asyncio.sleep(TICK_SECONDS)
 
 
@@ -205,7 +236,10 @@ async def run() -> None:
                 )
             )
         )
-        tasks.append(asyncio.create_task(again(lambda: timetable(lake), "the timetable")))
+        tasks.append(asyncio.create_task(again(lambda: licences(plugin, state), "the licences")))
+        tasks.append(
+            asyncio.create_task(again(lambda: timetable(plugin, state, lake), "the timetable"))
+        )
         tasks.append(asyncio.create_task(again(streamer.run, "the stream")))
         log.info("serving its pages on 127.0.0.1:%d, hearing the lake's wants", port)
         await stopped.wait()

@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.3.0 (unreleased)
+
+- On open-meridian 0.24.0 (contract 20): the role is `data` (a data
+  plugin), `dgm` until now.
+- `environment`, the data role's setting, replaces `sandbox`: a required
+  choice shown first, Live or Sandbox. One token, `tradier_access_token`,
+  serves either, its value carried over, labelled "Access token" on the
+  Settings form; the plugin's pages name it by the
+  environment ("API access token" or "Sandbox access token") and say which
+  environment the data comes from.
+- Connection and Datasets are the data role's pages
+  (spec/plugin-pages-follow-their-role): Connection's "Key", "Limits and
+  use" and "Stream" ("Does not stream" on the sandbox), Datasets' "Served",
+  "Wants" and "Subjects", in the role's order and words, with Tradier's
+  environment, host, stream session, feed column and "Kept current" at the
+  role's extension points; the "not set up yet" states; and
+  `read_connection` and `read_datasets` answering the role's common fields
+  with Tradier's beside. The data role's figures on the Summary.
+- Datasets says whether a deployment admin has licensed each dataset,
+  read from the deployment on start and every minute.
+- A restart's gap is not backfilled, and Datasets says so: Tradier's time
+  and sales history names no print by its sequence number.
+- The setting `synthetic` is `sample_data` (Sample data), the SDK's.
+- The data suite's v20 cases: a trade recorded and its datasets' licences
+  read, presented; the taker's side, the maker's side inverted, an odd lot
+  and a restart's gap not presented, each with why.
+
 ## 0.2.1 (unreleased)
 
 - `sandbox`, a setting off by default, "Tradier's developer sandbox": for

@@ -289,7 +289,7 @@ async def test_a_source_that_fails_is_said_and_its_subjects_silent(tmp_path: Pat
 async def test_a_book_instrument_known_only_by_another_sources_identifiers_is_priced(
     tmp_path: Path,
 ) -> None:
-    # Contract v18 as ruled 2026-10-10: a dgm reads an instrument's record
+    # Contract v18 as ruled 2026-10-10: a data plugin reads an instrument's record
     # (W3.6). TQQQ is known to the deployment only as a custodian's book
     # holds it -- its CUSIP and the custodian's symbol -- and the lake wants
     # its close: the plugin reads the record, finds the listing, joins its
@@ -317,7 +317,7 @@ async def test_a_book_instrument_known_only_by_another_sources_identifiers_is_pr
 async def test_with_no_read_of_an_instrument_its_own_listings_alone_are_served(
     tmp_path: Path,
 ) -> None:
-    # On a runtime from before the ruling of 2026-10-10, which grants a dgm
+    # On a runtime from before the ruling of 2026-10-10, which grants a data plugin
     # no read of an instrument's record.
     import meridian
 
@@ -325,7 +325,7 @@ async def test_with_no_read_of_an_instrument_its_own_listings_alone_are_served(
 
     def refused(_: Any) -> Any:
         raise meridian.NotGranted(
-            "platform.reference.query.resolve-instrument", "this plugin holds dgm"
+            "platform.reference.query.resolve-instrument", "this plugin holds data"
         )
 
     recorder.answer("ResolveInstrument", refused)

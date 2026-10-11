@@ -1,6 +1,10 @@
-"""The `sandbox` setting: on, the plugin asks Tradier's developer sandbox with
-the token entered, says its data is delayed and opens no stream; off, it asks
-api.tradier.com in real time and streams, as before."""
+"""The `environment` setting, the data role's (contract v20): a required choice
+shown first, `live` or `sandbox`, the token gated on it. On `sandbox` the
+plugin asks Tradier's developer sandbox with the sandbox access token, says
+its data is delayed and opens no stream ("Does not stream"); on `live` it
+asks api.tradier.com with the API access token, in real time, and streams.
+One token, `tradier_access_token`, serves either (option B, 2026-10-11): the
+pages name it by the environment."""
 
 from __future__ import annotations
 
@@ -14,7 +18,13 @@ from tradier.__main__ import feed_for, source_for
 from tradier.lake import LIVE_KINDS, TRADES, Lake, Products, Standing
 from tradier.page import CONNECTION, DATASETS, State, pages, use
 from tradier.raw import RawStore
-from tradier.settings import DECLARED, SANDBOX, SANDBOX_SAID, TOKEN, config_from
+from tradier.settings import (
+    ENVIRONMENT,
+    SANDBOX_SAID,
+    SETTINGS,
+    TOKEN,
+    config_from,
+)
 from tradier.stream import Streamer, TradierFeed
 from tradier.vendor import Response
 
@@ -38,7 +48,8 @@ class Scripted:
 
 def state_for(tmp: Path, sandbox: bool, transport: Scripted) -> State:
     """The plugin's state as watch_settings makes it from these settings."""
-    config = config_from({TOKEN: KEY, SANDBOX: sandbox})
+    environment = "sandbox" if sandbox else "live"
+    config = config_from({ENVIRONMENT: environment, TOKEN: KEY})
     store = RawStore(tmp / "raw")
     tradier, source = source_for(config, store, transport)
     assert source is not None
@@ -66,12 +77,19 @@ def state_for(tmp: Path, sandbox: bool, transport: Scripted) -> State:
     return state
 
 
-def test_the_setting_is_declared_off_by_default() -> None:
-    (declared,) = [s for s in DECLARED if s.name == SANDBOX]
-    assert declared.kind is bool and declared.default is False and not declared.developer
-    assert declared.label == "Tradier's developer sandbox"
-    assert "developer sandbox token" in declared.description
+def test_the_environment_is_declared_first_and_one_token_serves_either() -> None:
+    first, token, sample = SETTINGS
+    assert first.name == ENVIRONMENT and first.required and first.default == "live"
+    assert [c.value for c in first.choices] == ["live", "sandbox"] and first.label == "Environment"
+    assert token.name == TOKEN and token.secret and token.required
+    assert token.applies_when is None and token.label == "Access token"
+    assert token.description.endswith("it must match Environment.")
+    assert sample.name == "sample_data" and sample.developer
     assert config_from({TOKEN: KEY}).on_sandbox is False
+    # The value carries over whichever environment is chosen: nothing re-entered.
+    for environment in ("live", "sandbox"):
+        config = config_from({ENVIRONMENT: environment, TOKEN: KEY})
+        assert config.credentials is not None and config.credentials.token == KEY
 
 
 def test_on_it_asks_the_sandbox_marks_data_delayed_and_opens_no_stream(tmp_path: Path) -> None:
@@ -89,18 +107,24 @@ def test_on_it_asks_the_sandbox_marks_data_delayed_and_opens_no_stream(tmp_path:
     use(state)
     client = PageClient(pages)
     connection = client.call_tool("read_connection").data
-    assert connection["mode"] == "sandbox" and connection["detail"] == SANDBOX_SAID
-    assert connection["live_feed"] == "quotes, delayed" and connection["sessions"] == []
+    assert connection["mode"] == "Sandbox" and connection["detail"] == SANDBOX_SAID
+    assert connection["sessions"] is None and connection["stream"] is None
+    assert [c["label"] for c in connection["credentials"]] == ["Sandbox access token"]
     quotes = next(f for f in connection["feeds"] if f["feed"] == "quotes")
-    assert quotes["what"] == "Quotes, every exchange, delayed 15 minutes"
+    assert quotes["what"] == "quotes, every exchange, delayed 15 minutes"
     page = client.get(CONNECTION, "admin").text
     assert SANDBOX_SAID.replace("'", "&#39;") in page and KEY not in page
+    assert "Does not stream" in page
     datasets = client.call_tool("read_datasets").data
-    feeds = {d["key"]: d["feed"] for d in datasets["datasets"]}
+    feeds = {d["key"]: d["feed"] for d in datasets["served"]}
     assert set(feeds.values()) == {"consolidated, delayed, sandbox.tradier.com"}
-    entitled = {d["key"]: d["entitled"] for d in datasets["datasets"]}
-    assert entitled == {"daily": True, "live": True, "trades": False}
-    assert datasets["streamed"] == 0 and not any(w["streamed"] for w in datasets["standing"])
+    at_vendor = {d["key"]: d["entitled_at_vendor"] for d in datasets["served"]}
+    assert at_vendor == {
+        "daily": "Yes, delayed 15 minutes",
+        "live": "Yes, delayed 15 minutes",
+        "trades": "No: the sandbox does not stream",
+    }
+    assert datasets["streamed"] == 0 and not any(w["streamed"] for w in datasets["wants"])
     assert "sandbox.tradier.com" in client.get(DATASETS, "admin").text
 
 
@@ -117,14 +141,16 @@ def test_off_it_asks_tradier_in_real_time_and_streams(tmp_path: Path) -> None:
     use(state)
     client = PageClient(pages)
     connection = client.call_tool("read_connection").data
-    assert connection["mode"] == "live" and connection["live_feed"] == "quotes"
-    assert len(connection["sessions"]) == 1
+    assert connection["mode"] == "Live" and connection["real_time"]
+    assert connection["sessions"] in (0, 1) and connection["stream"] is not None
+    assert [c["label"] for c in connection["credentials"]] == ["API access token"]
     quotes = next(f for f in connection["feeds"] if f["feed"] == "quotes")
     assert quotes == {
         "feed": "quotes",
-        "what": "Quotes, every exchange, in real time",
+        "what": "quotes, every exchange, in real time",
         "entitled": True,
     }
     datasets = client.call_tool("read_datasets").data
-    assert {d["feed"] for d in datasets["datasets"]} == {"consolidated, api.tradier.com"}
-    assert all(d["entitled"] for d in datasets["datasets"]) and datasets["streamed"] == 1
+    assert {d["feed"] for d in datasets["served"]} == {"consolidated, api.tradier.com"}
+    assert all(d["entitled_at_vendor"] == "Yes" for d in datasets["served"])
+    assert datasets["streamed"] == 1

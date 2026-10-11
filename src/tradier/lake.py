@@ -39,7 +39,7 @@ record it was first recorded with, so the lake keeps it unchanged.
 
 **Every subject is the deployment's own instrument.** The lake wants
 instruments by the deployment's ID; the plugin asks the instrument store
-what the record is (W3.6, a dgm's from contract v18 as ruled 2026-10-10)
+what the record is (W3.6, a data plugin's from contract v18 as ruled 2026-10-10)
 -- the book's instruments came from a custodian, known by its identifiers
 -- and takes the listing's symbol from its
 identifiers: the one this source reported (`symbol` at this source) where it
@@ -282,6 +282,8 @@ class Lake:
         self._forming_at = 0
         #: Whether the deployment answers this plugin's ResolveInstrument.
         self.reads_instruments = True
+        #: What each want was answered with since start: recorded, declined.
+        self.by_want: dict[str, list[int]] = {}
         self.last_error = ""
 
     # ── Names ────────────────────────────────────────────────────────────
@@ -318,11 +320,11 @@ class Lake:
                 instrument_id=entity_id, as_of_ns=self.clock_ns()
             )
         except meridian.NotGranted:
-            # A runtime from before the ruling of 2026-10-10 grants a dgm no
+            # A runtime from before the ruling of 2026-10-10 grants a data plugin no
             # read of what an instrument is (W3.6): a subject it did not
             # resolve itself is not one it can name to its source. Asked
             # once, and said on the Datasets page.
-            log.warning("this dgm may not read an instrument's record; serving its own")
+            log.warning("this data plugin may not read an instrument's record; serving its own")
             self.reads_instruments = False
             return None
         if not found.found:
@@ -510,6 +512,8 @@ class Lake:
             else:
                 done = await self.plugin.record_prices(prices=list(batch), want_id=want_id)
             counts.recorded += done.recorded
+            if want_id:
+                self.by_want.setdefault(want_id, [0, 0])[0] += done.recorded + done.restated
             counts.restated += done.restated
             counts.unchanged += done.unchanged
             counts.last_recorded_at_ns = self.clock_ns()
@@ -526,6 +530,7 @@ class Lake:
             )
         counts.declined += len(subjects)
         counts.last_declined = reason
+        self.by_want.setdefault(want_id, [0, 0])[1] += len(subjects)
 
     async def _fetch(self, call: Callable[[], Any]) -> Any:
         """A blocking call to the source, in a thread; None where it failed,
