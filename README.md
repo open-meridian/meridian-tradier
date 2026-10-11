@@ -6,7 +6,7 @@ quotes, and its time and sales as trades, put into the deployment's lake for
 the plugins that value and show a book.
 
 It is the second half of the retail pair, beside
-[meridian-alpaca](https://github.com/open-meridian/meridian-alpaca): both
+[meridian-alpaca](https://github.com/open-meridian/plugin-alpaca): both
 pass the same suite of the SDK, unchanged. Tradier is also a broker; this
 repository is named for the vendor so that a `custody` or `connectivity` role can
 arrive here later without a rename.
