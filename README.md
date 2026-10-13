@@ -1,19 +1,24 @@
 # meridian-tradier
 
 Tradier's US equity and ETF market data in an [Open Meridian](https://open-meridian.dev)
-deployment, as a data plugin (the `data` role): daily closes and bars, live prices and
-quotes, and its time and sales as trades, put into the deployment's lake for
-the plugins that value and show a book.
+deployment, and the orders a desk places at Tradier. Two roles:
+
+- `data`: daily closes and bars, live prices and quotes, and its time and
+  sales as trades, put into the deployment's lake for the plugins that
+  value and show a book.
+- `connectivity` (from 0.6.0, contract 22): the placements a desk's `ems`
+  names this instance on, placed at Tradier, in its developer sandbox
+  (paper trading) or live, and what Tradier did with them:
+  acknowledgements, rejections, changes, cancels, fills with their
+  settlement dates, and busts.
 
 It is the second half of the retail pair, beside
 [meridian-alpaca](https://github.com/open-meridian/plugin-alpaca): both
-pass the same suite of the SDK, unchanged. Tradier is also a broker; this
-repository is named for the vendor so that a `custody` or `connectivity` role can
-arrive here later without a rename.
+pass the same suites of the SDK, unchanged. A `custody` role, Tradier's view
+of the account, follows in the next version.
 
-**Status:** 0.5.0, on open-meridian 0.26.0 (contract 22), proven locally
-against core v21's runtime and plugin harness, neither released yet. Not
-released.
+**Status:** 0.6.0, on open-meridian 0.26.0 (contract 22), proven locally
+against core v22's runtime and plugin harness (8774368). Not released.
 
 ## What it serves
 
@@ -146,6 +151,69 @@ for an individual it does not expire.
    `trades`,
    and entitle the plugins that read prices.
 
+The same token trades for connectivity: on **Live** your brokerage
+account, real money; on **Sandbox** the developer sandbox's paper account,
+simulated money.
+
+## Trading at Tradier
+
+With the `connectivity` role (granted by a deployment admin, as every role
+is), the plugin is a desk's connection to Tradier:
+
+1. A deployment admin makes the plugin available to the desk's `ems`, and
+   the `ems`'s admin links it and maps a book account to an account's
+   venue account code: its Tradier account number, as **Trading** lists
+   each account the token reaches (`GET /user/profile`).
+2. **Trading** (under Manage, the connectivity role's admin) says plainly
+   which environment the account is in -- **Paper**, the developer
+   sandbox's simulated money, or **Live** -- and each account. A new
+   account is **read-only**: every placement on it is rejected
+   `unsupported`, nothing sent, until the connectivity role's admin presses
+   **Enable trading** (`enable_trading`, checked by
+   `check_enable_trading`). Its catalogue is then published: `market` for
+   the `day`; `limit`, `stop` and `stop_limit`, each `day` or `gtc`.
+   Tradier's `pre` and `post` sessions have no counterpart among the
+   contract's times in force, and Tradier takes no good-till-date order.
+3. Each placement naming the instance is placed at Tradier as an equity
+   order, with the placement's ID as the order's tag. Tradier streams no
+   account's orders on its sandbox, so the plugin reads each account's
+   orders every 5 seconds: a fill is the growth in the order's executed
+   quantity, at the last fill's price as Tradier states it where the growth
+   is that fill, inferred from the averages otherwise, derived to one ID
+   however often it is read. Every fill carries the deployment's settlement
+   date for it (Tradier states none), and waits for it rather than go with
+   a guess.
+4. A replace the desk asks for is Tradier's `PUT` of the order: its type,
+   duration, limit and stop change, the order keeping its ID. Tradier never
+   changes an order's quantity, so a replace asking one is rejected
+   `unsupported`, nothing sent. A cancel is Tradier's `DELETE`.
+5. A pause on the plugin, the account or All accounts holds new placements
+   back; a stop also cancels at Tradier what it is working, each cancel
+   reported naming the stop. A placement sent but not answered is asked
+   about on the next read, by its tag, never sent again, across a restart
+   too (`trading/sent.json` in the plugin's storage).
+
+An order the account holder places at Tradier outside the platform is left
+alone: no order is recorded and no fill reported (venue-originated fills are
+contract 23's). Every exchange that places, changes or cancels is kept as a
+raw record of the `trading` kind (seven years by default, an admin's
+setting, archived, kept or deleted past it), and each read under
+`responses` (30 days); **Raw records** (Open and View) follows a fact's
+reference to the record, for a person who may read the account.
+
+What Tradier never states, the plugin does not invent: a fill's place of
+execution, a locate, and a fee charged on a placement that filled nothing.
+The connectivity suite's case for a charge is therefore not produced, until
+the product owner rules on it.
+
+**Tradier's developer sandbox serves no account history** (its history is
+updated nightly, and only on live accounts), so what a later version reads
+of an account's activity it reads live only.
+
+**The sandbox run is the product owner's, by hand.** The tests and the e2e
+trade with a simulated brokerage (src/tradier/synthetic_broker.py) and never
+reach Tradier's sandbox or live brokerage API.
+
 ## Checking it live
 
 The live check is the account holder's own, with their own token, on their
@@ -170,8 +238,8 @@ own machine; CI never runs it.
 
 ## Building it
 
-    make ci-local        lint, the tests (the SDK's data suite among them), meridian plugin check, the image, and the e2e
-    make e2e             the plugin on core's plugin harness, on sample data, with no token (e2e/run.py)
+    make ci-local        lint, the tests (the SDK's data and connectivity suites among them), meridian plugin check, the image, and the e2e
+    make e2e             the plugin on core's plugin harness, on sample data, with no token (e2e/run.py), the order path among it (e2e/orders.py)
     make preview         the pages on sample data, for a browser beside the kit
     make install-hooks   push runs ci-local first
 

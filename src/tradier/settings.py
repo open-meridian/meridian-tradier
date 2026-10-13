@@ -10,21 +10,26 @@ repr; vendor.py sends it as a bearer token and keeps it in no raw record;
 the Connection page says whether it is set, never what it is.
 
 The data role's common settings, in its order
-(spec/plugin-pages-follow-their-role, Q12 as amended 2026-10-10):
+(spec/plugin-pages-follow-their-role, Q12 as amended 2026-10-10), and from
+0.6.0 connectivity's too, each naming the two roles it serves:
 
 - `environment` first, a required choice (`meridian.environment`): `live`,
   Tradier's API with a brokerage account's token, or `sandbox`, Tradier's
   developer sandbox (sandbox.tradier.com), for testing, its data delayed 15
-  minutes and with no stream. Before 0.3.0, `sandbox`, a switch.
+  minutes and with no stream. Before 0.3.0, `sandbox`, a switch. From 0.6.0
+  it is also the account connectivity trades: on `live` the brokerage
+  account's, real money; on `sandbox` the developer sandbox's paper account,
+  simulated money.
 - the token, one required secret, `tradier_access_token`, for whichever
-  environment is chosen: the brokerage account's API access token on
-  `live`, a developer sandbox token on `sandbox` (the product owner,
-  2026-10-11, option B: one token, so which source a dataset comes from is
-  never in doubt). Its value carries over from 0.2.x unchanged. The
-  plugin's own pages name it by the environment -- "API access token" or
-  "Sandbox access token" -- and say which environment the data comes from;
-  core's Settings form shows the one label the declaration carries, a
-  neutral "Access token", so it never names the wrong environment.
+  environment is chosen, and for both roles (the same token trades): the
+  brokerage account's API access token on `live`, a developer sandbox token
+  on `sandbox` (the product owner, 2026-10-11, option B: one token, so which
+  source a dataset comes from is never in doubt). Its value carries over
+  from 0.2.x unchanged. The plugin's own pages name it by the environment --
+  "API access token" or "Sandbox access token" -- and say which environment
+  the data comes from; core's Settings form shows the one label the
+  declaration carries, a neutral "Access token", so it never names the wrong
+  environment.
 - `sample_data`, a developer's setting (`meridian.sample_data`, shown
   only on a development deployment), serving the built-in recorded exchange
   (synthetic.py) instead of calling Tradier, with no token: what the e2e
@@ -44,6 +49,13 @@ TOKEN = "tradier_access_token"
 SAMPLE_DATA = "sample_data"
 #: What the plugin says of the sandbox, plainly, wherever it says which host.
 SANDBOX_SAID = "Tradier's developer sandbox: delayed 15 minutes, no streaming"
+#: The roles each setting serves: both of them.
+EVERY_ROLE = ("data", "connectivity")
+#: What connectivity says of each environment, wherever it says which.
+SAID = {
+    LIVE: "Live: Tradier Brokerage's account, real money",
+    SANDBOX: "Paper: Tradier's developer sandbox, simulated money",
+}
 
 
 @meridian.settings
@@ -53,21 +65,29 @@ class Declared:
 
     environment: str = meridian.environment(
         description=(
-            "Live: Tradier's API, with a Tradier Brokerage account's token. Sandbox: "
-            "Tradier's developer sandbox, for testing, its data delayed 15 minutes and "
-            "not streamed."
-        )
+            "Live: Tradier's API, with a Tradier Brokerage account's token, its orders real. "
+            "Sandbox: Tradier's developer sandbox, for testing, its data delayed 15 minutes "
+            "and not streamed, its orders paper trading with simulated money."
+        ),
+        roles=EVERY_ROLE,
     )
     tradier_access_token: str = meridian.setting(
         "Access token",
         required=True,
         secret=True,
+        roles=EVERY_ROLE,
         description=(
             "Your Tradier API access token for Live, or a developer sandbox token for "
             "Sandbox: it must match Environment."
         ),
     )
-    sample_data: bool = meridian.sample_data()
+    sample_data: bool = meridian.sample_data(
+        roles=EVERY_ROLE,
+        description=(
+            "Answer from built-in made-up data instead of Tradier, and trade with a simulated "
+            "brokerage, changing nothing else the plugin does. Development deployments only."
+        ),
+    )
 
 
 DECLARED = Declared
@@ -110,6 +130,11 @@ class Config:
         """Whether Tradier's developer sandbox is asked: sample data asks
         nothing, so it wins."""
         return self.environment == SANDBOX and not self.sample_data
+
+    @property
+    def paper(self) -> bool:
+        """Whether the account traded is the sandbox's paper account."""
+        return self.environment == SANDBOX
 
     @property
     def ready(self) -> bool:

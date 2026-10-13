@@ -19,6 +19,14 @@ opens none, and keeps live prices current as it does without a stream. A
 restart's gap is not backfilled: Tradier's time and sales history names no
 print by its sequence number, so reading it again would record trades twice.
 
+From 0.6.0 it is also the account's connection for orders, where the
+deployment launched it with `connectivity`: it hears each placement naming
+its instance and places it at Tradier in the environment chosen (live, or
+the developer sandbox's paper trading), reads the account's orders on a
+poll, Tradier streaming none on its sandbox, and honours the firm's pauses
+and stops (trading.py). Sample data trades with a simulated brokerage
+(synthetic_broker.py), never Tradier.
+
 It holds nothing it cannot lose: what each subject's symbol is, and every
 raw response, are in the storage the deployment grants it (decisions/028);
 a restart reads them back and hears the lake again. The token arrives as a
@@ -34,14 +42,18 @@ import os
 import signal
 import tempfile
 from collections.abc import Callable, Coroutine
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import meridian
 from meridian import edge
 
+from .broker import Broker
 from .convert import spelled
 from .declaration import DECLARATION
+from .kinds import Store, tend, windows_from
+from .kinds import root as kinds_root
 from .lake import Lake, Products
 from .page import TITLE, State, figures, pages, serve
 from .raw import RawStore, storage_root
@@ -49,7 +61,10 @@ from .settings import DECLARED, SANDBOX_SAID, Config, config_from
 from .source import TradierSource
 from .stream import Feed, FeedError, Refused, Streamer, TradierFeed
 from .synthetic import SyntheticFeed, SyntheticTransport, exchange
+from .synthetic_broker import SyntheticBroker
+from .trading import Noted, Trader, trading_files
 from .vendor import API, SANDBOX, NoKey, Tradier, Transport, VendorError, urllib_transport
+from .venue import TradierVenue
 
 log = logging.getLogger("tradier")
 
@@ -57,6 +72,47 @@ log = logging.getLogger("tradier")
 TICK_SECONDS = 15
 #: How often the datasets' licences are read again.
 LICENCES_SECONDS = 60
+#: How often connectivity reads an account's orders at Tradier, which
+#: streams none on its sandbox; and the simulated brokerage, which steps an
+#: order on each read.
+POLL_SECONDS = 5
+SYNTHETIC_POLL_SECONDS = 1
+#: How often the kinds' windows are tended between deliveries of settings.
+TEND_SECONDS = 3600
+
+
+class Account:
+    """Connectivity's client for the settings as they stand: Tradier's API of
+    the environment chosen, or the simulated brokerage."""
+
+    def __init__(self, store: Store, granted: Path | None) -> None:
+        self.store, self.granted = store, granted
+        self.broker: Broker | None = None
+        self.venue: TradierVenue | None = None
+        self._synthetic: SyntheticBroker | None = None
+        self._said: tuple[object, ...] = ()
+
+    def use(self, config: Config) -> bool:
+        """Make the client again where the settings changed what it is; True
+        where they did."""
+        said = (config.sample_data, config.environment, config.credentials)
+        if said == self._said:
+            return False
+        self._said = said
+        if config.sample_data:
+            if self._synthetic is None:
+                state = self.granted / "synthetic-venue" / "orders.json" if self.granted else None
+                self._synthetic = SyntheticBroker(lambda: datetime.now(UTC), state)
+            self.broker = Broker(
+                self.store, None, SANDBOX, send=self._synthetic, keyless=True, synthetic=True
+            )
+        elif config.credentials is not None:
+            base = SANDBOX if config.paper else API
+            self.broker = Broker(self.store, config.credentials, base)
+        else:
+            self.broker = None
+        self.venue = TradierVenue(self.broker) if self.broker is not None else None
+        return True
 
 
 def source_for(
@@ -148,10 +204,19 @@ async def licences(plugin: meridian.Plugin, state: State) -> None:
 
 
 async def watch_settings(
-    plugin: meridian.Plugin, state: State, store: RawStore, configured: asyncio.Event
+    plugin: meridian.Plugin,
+    state: State,
+    store: RawStore,
+    configured: asyncio.Event,
+    account: Account | None = None,
 ) -> None:
     async for delivered in plugin.settings():
         state.config = config_from(delivered.values)
+        state.values = dict(delivered.values)
+        if account is not None:
+            account.use(state.config)
+            seconds = SYNTHETIC_POLL_SECONDS if state.config.sample_data else POLL_SECONDS
+            state.polled = f"Polled every {seconds}s: Tradier streams no orders on its sandbox"
         state.tradier, state.source = source_for(state.config, store)
         if state.lake is not None:
             state.lake.source = state.source
@@ -165,6 +230,37 @@ async def watch_settings(
             state.lake.restream()
         if state.streamer is not None:
             state.streamer.restart()
+        if account is not None:
+            await tend_now(plugin, account.store, delivered.values)
+
+
+async def tend_now(plugin: meridian.Plugin, kinds: Store, values: Any) -> None:
+    """Each kind's units past its window moved as the settings say."""
+    try:
+        await tend(plugin, kinds, windows_from(values), datetime.now(UTC).date())
+    except (meridian.MeridianError, OSError) as failed:
+        log.warning("the raw records were not tended this time: %s", failed)
+
+
+async def tend_hourly(plugin: meridian.Plugin, state: State, kinds: Store) -> None:
+    while True:
+        await asyncio.sleep(TEND_SECONDS)
+        await tend_now(plugin, kinds, state.values)
+
+
+async def follow_scope(plugin: meridian.Plugin, state: State) -> None:
+    """The account scope and its ems's venue account map (W11.22), on start
+    and on every change: connectivity and its pages hold it from here."""
+    async for scope in plugin.account_scope():
+        state.scope = scope
+
+
+async def trade(state: State, trader: Trader, hear: bool) -> None:
+    """Connectivity's work; a refusal it meets is said, and the rest goes on."""
+    await trader.run(
+        lambda: SYNTHETIC_POLL_SECONDS if state.config.sample_data else POLL_SECONDS,
+        hear=hear,
+    )
 
 
 async def timetable(plugin: meridian.Plugin, state: State, lake: Lake) -> None:
@@ -204,44 +300,74 @@ async def run() -> None:
     port = int(os.environ.get("TRADIER_PAGE_PORT", "8000"))
     granted = edge.storage_dir()
     store = RawStore(storage_root(Path(tempfile.mkdtemp(prefix="tradier-raw-"))))
+    kinds = Store(kinds_root())
     async with await meridian.connect(
         interface=meridian.Interface(port=port, title=TITLE, pages=pages),
         settings=DECLARED,
         declaration=DECLARATION,
     ) as plugin:
+        roles = set(plugin.identity.roles)
         log.info(
             "registered as %s, roles %s",
             plugin.identity.instance_id,
-            ", ".join(plugin.identity.roles) or "none",
+            ", ".join(sorted(roles)) or "none",
         )
         lake = Lake(plugin, None, Products(granted / "products.json" if granted else None))
-        state = State(lake=lake)
+        state = State(lake=lake, store=kinds)
         streamer = Streamer(lambda: feed_for(state, store), lake.heard, lake.flush)
         lake.streamer = state.streamer = streamer
+        account = Account(kinds, granted)
+        if "connectivity" in roles:
+            sent, enabled = trading_files(granted)
+            state.trader = Trader(
+                plugin,
+                lambda: account.venue,
+                now=lambda: datetime.now(UTC),
+                sent=Noted(sent),
+                enabled=Noted(enabled),
+                # The venue account codes its ems mapped on it (W11.22).
+                scope=lambda: state.scope,
+            )
         configured = asyncio.Event()
         page = serve(plugin, state, port)
         tasks = [
             asyncio.create_task(
-                again(lambda: watch_settings(plugin, state, store, configured), "the settings")
+                again(
+                    lambda: watch_settings(plugin, state, store, configured, account),
+                    "the settings",
+                )
             )
         ]
         await configured.wait()
-        tasks.append(
-            asyncio.create_task(
-                again(
-                    lambda: plugin.receive(
-                        observations_wanted=lake.on_want, want_withdrawn=lake.on_withdrawn
-                    ),
-                    "hearing the lake",
-                )
+        if state.trader is not None:
+            trader = state.trader
+            tasks.append(
+                asyncio.create_task(again(lambda: follow_scope(plugin, state), "the scope"))
             )
-        )
-        tasks.append(asyncio.create_task(again(lambda: licences(plugin, state), "the licences")))
-        tasks.append(
-            asyncio.create_task(again(lambda: timetable(plugin, state, lake), "the timetable"))
-        )
-        tasks.append(asyncio.create_task(again(streamer.run, "the stream")))
-        log.info("serving its pages on 127.0.0.1:%d, hearing the lake's wants", port)
+            tasks.append(asyncio.create_task(tend_hourly(plugin, state, kinds)))
+            # With the data role too, its placements are heard on the one
+            # stream that hears the lake's wants (below).
+            hears = "data" not in roles
+            tasks.append(asyncio.create_task(again(lambda: trade(state, trader, hears), "trading")))
+        if "data" in roles:
+            hearing: dict[str, Any] = {
+                "observations_wanted": lake.on_want,
+                "want_withdrawn": lake.on_withdrawn,
+            }
+            if state.trader is not None:
+                hearing["placement_updated"] = state.trader.on_placement
+                hearing["trading_instruction_changed"] = state.trader.on_instruction
+            tasks.append(
+                asyncio.create_task(again(lambda: plugin.receive(**hearing), "hearing the lake"))
+            )
+            tasks.append(
+                asyncio.create_task(again(lambda: licences(plugin, state), "the licences"))
+            )
+            tasks.append(
+                asyncio.create_task(again(lambda: timetable(plugin, state, lake), "the timetable"))
+            )
+            tasks.append(asyncio.create_task(again(streamer.run, "the stream")))
+        log.info("serving its pages on 127.0.0.1:%d", port)
         await stopped.wait()
         log.info("stopping")
         for task in tasks:
