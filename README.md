@@ -11,7 +11,7 @@ pass the same suite of the SDK, unchanged. Tradier is also a broker; this
 repository is named for the vendor so that a `custody` or `connectivity` role can
 arrive here later without a rename.
 
-**Status:** 0.4.0, on open-meridian 0.25.0 (contract 21), proven locally
+**Status:** 0.5.0, on open-meridian 0.26.0 (contract 22), proven locally
 against core v21's runtime and plugin harness, neither released yet. Not
 released.
 
@@ -79,11 +79,13 @@ released.
   stopped is not read, for the same reason. Datasets says so.
 - **Streamed only:** a reader's range of trades is not Tradier's to answer,
   for the same reason, and is declined, not covered.
-- **The suite.** Six of its cases are not presented, each with why: a
+- **The suite.** Eight of its cases are not presented, each with why: a
   currency's rate and a crypto asset's price (kinds Tradier's stock data never
   publishes), the two about the side that took liquidity (a field,
   `Trade.aggressor`, Tradier never states), an odd lot (a characteristic no
-  documented flag says), and a restart's gap backfilled (above).
+  documented flag says), a restart's gap backfilled (above), and contract
+  v22's two calendar cases: it dates each bar by the date Tradier states, and
+  never reads a settlement calendar or asks for a settlement date.
 
 **Instruments another source named.** The lake asks for a price by the
 deployment's own instrument ID. An instrument known to the deployment only

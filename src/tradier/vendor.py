@@ -47,7 +47,7 @@ from .settings import Credentials
 
 API = "https://api.tradier.com/v1"
 SANDBOX = "https://sandbox.tradier.com/v1"
-USER_AGENT = "meridian-tradier/0.4.0 (+https://open-meridian.dev)"
+USER_AGENT = "meridian-tradier/0.5.0 (+https://open-meridian.dev)"
 #: Tradier's market data over WebSocket, for a session made by REST.
 STREAM = "wss://ws.tradier.com/v1/markets/events"
 NS = 1_000_000_000
