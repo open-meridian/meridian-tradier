@@ -22,7 +22,7 @@ It is the second half of the retail pair, beside
 [meridian-alpaca](https://github.com/open-meridian/plugin-alpaca): both
 pass the same suites of the SDK, unchanged.
 
-**Status:** 0.7.0, on open-meridian 0.27.0 (contract 23), proven locally
+**Status:** 0.7.1, on open-meridian 0.27.0 (contract 23), proven locally
 against core v23's runtime and plugin harness, built locally. Not released.
 
 ## What it serves
@@ -137,15 +137,22 @@ for an individual it does not expire.
    with your brokerage account's token, or **Sandbox**, Tradier's developer
    sandbox (`sandbox.tradier.com`), for testing, whose data is delayed 15
    minutes and which does not stream; live prices are still kept current
-   once a minute. Then the one token, for the environment chosen: your
+   once a minute. It is Sandbox until a person chooses Live (from 0.7.1):
+   neither an upgrade nor an Environment never saved turns the plugin
+   Live. Then the one token, for the environment chosen: your
    brokerage account's API access token on Live, a developer sandbox token
    on Sandbox. The plugin's pages name it by the environment ("API access
    token" or "Sandbox access token") and say which environment the data
    comes from; the Settings form calls it **Access token**, saying it must
    match Environment. It is a secret setting: once saved it is never shown again,
    logged, put on a page or sent anywhere but Tradier. Until 0.3.0 the
-   sandbox was a switch, `sandbox`; a deployment that had it on chooses
-   Sandbox, and its token carries over, nothing re-entered.
+   sandbox was a switch, `sandbox`. From 0.7.1 it is declared again, as a
+   developer's setting, "Sandbox (the old way)", and read only while
+   Environment is unset: a deployment that had it on runs on Sandbox, one
+   that had it off on Live, and its token carries over, nothing re-entered.
+   Once Environment is saved the old switch is not read. Environment being
+   required, the dashboard names it as missing until it is saved once,
+   though the plugin runs on the environment the switch said meanwhile.
 4. Open **Connection**: under **Key** it says the mode (Live or Sandbox),
    whether the token is set (never its value), whether Tradier answered,
    and whether its quotes are real time; on the sandbox, "Tradier's

@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.7.1 (unreleased)
+
+- **Live is a person's choice.** `environment` defaults to `sandbox`, not
+  `live`: an upgrade, or an Environment never saved, no longer turns the
+  plugin Live. 0.7.0 came up on Live over a deployment that had saved
+  0.2.1's `sandbox` switch and sent its sandbox token to api.tradier.com,
+  which refused it (401). Its description says Live is chosen by a person
+  (the product owner, 2026-10-14).
+- 0.2.1's `sandbox` is declared again, as a developer's setting, "Sandbox
+  (the old way)", described as replaced by Environment and read only while
+  Environment is unset: on, Sandbox; off, Live. A value saved under it now
+  reaches the plugin, which reads it as SnapTrade reads its 0.1.0
+  `snaptrade_personal_key`; once Environment is saved it is not read. The
+  plugin has no storage of settings to backfill: settings are core's, and a
+  plugin sets none.
+- Nothing else changes. Tests: an unset environment is the sandbox, Live
+  only once chosen, and the old switch honoured while Environment is unset
+  and ignored once it is saved; `make e2e` reads the default, Sandbox, on
+  `read_connection`.
+
 ## 0.7.0 (unreleased)
 
 - On open-meridian 0.27.0 (contract 23): the pins moved as the SDK's

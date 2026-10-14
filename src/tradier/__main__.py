@@ -219,7 +219,7 @@ async def watch_settings(
     woken: asyncio.Event | None = None,
 ) -> None:
     async for delivered in plugin.settings():
-        state.config = config_from(delivered.values)
+        state.config = config_from(delivered.values, delivered.missing_required)
         state.values = dict(delivered.values)
         if account is not None:
             if account.use(state.config) and woken is not None:

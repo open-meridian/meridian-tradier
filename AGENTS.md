@@ -13,8 +13,10 @@ as for every plugin.
 - `src/tradier/declaration.py` and `settings.py`: the catalogue (`daily`,
   `live` and `trades`), the settings in the data role's order
   (`environment` first, `live` or `sandbox`, Tradier's developer sandbox,
-  delayed and not streamed; one token, secret, for either, which the
-  pages name by the environment;
+  delayed and not streamed, `sandbox` by default so Live is a person's
+  choice; one token, secret, for either, which the
+  pages name by the environment; 0.2.1's `sandbox` switch, a developer's,
+  read only while `environment` is unset;
   `sample_data`, a developer's) and the storage. A dataset's key, modes, day and default terms change only with a
   new version, and the deployment admin sees them before approving it.
 - `src/tradier/vendor.py`: the only module that speaks to Tradier. Every

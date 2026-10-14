@@ -71,8 +71,9 @@ def test_the_connection_page_and_its_tool_read_one_source(client: PageClient) ->
     answer = client.call_tool("read_connection")
     assert answer.status == 200 and answer.outcome == "unchanged"
     data = answer.data
-    assert data["mode"] == "Sample data" and data["environment"] == "live"
-    assert [c["label"] for c in data["credentials"]] == ["API access token"]
+    # Environment unset: Sandbox, the default (from 0.7.1); sample data asks nothing.
+    assert data["mode"] == "Sample data" and data["environment"] == "sandbox"
+    assert [c["label"] for c in data["credentials"]] == ["Sandbox access token"]
     assert data["limit"].startswith("60 a minute") and data["sessions"] == 1
     assert data["stream"]["state"] == "streaming" and data["stream"]["subscribed"] == 1
     assert data["stream"]["reconnects"] == 2 and "a gap Tradier&#39;s history" in page
