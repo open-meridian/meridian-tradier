@@ -1,9 +1,9 @@
-"""The data suite, the SDK's own (meridian.suites, contract v20), run unchanged
-against this plugin: every case mapped to the plugin's own conversion, from
+"""The data suite, the SDK's own (meridian.suites; contract v23 from 0.7.0),
+run unchanged against this plugin: every case mapped to the plugin's own conversion, from
 Tradier's recorded exchange and stream, through the lake's half it runs in
 production (lake.py), against the suite's `Recorder`.
 
-Eight cases are not presented, each with why (`NOT_PRESENTED`). Two are about
+Eleven cases are not presented, each with why (`NOT_PRESENTED`). Two are about
 kinds of data Tradier's US stock data never publishes (`about`, from
 contract v19): a currency's rate against another currency, and a crypto
 asset's price. Three are about a field its time and sales never state
@@ -18,7 +18,9 @@ is keyed by, so reading it after a restart would record trades twice; the
 gap is said on the Datasets page rather than filled. And two are contract
 v22's calendar cases (`about` calendars and settlement dates): the plugin
 dates a bar by the date Tradier states, and never reads a settlement
-calendar or asks for a settlement date.
+calendar or asks for a settlement date. And from contract v23, three are
+about an event contract's outcomes (`about` outcomes), which Tradier's
+stock data never states.
 """
 
 from __future__ import annotations
@@ -72,6 +74,13 @@ NOT_PRESENTED = {
     "reads-a-calendar": ("dates each bar by the date Tradier states: reads no settlement calendar"),
     "asks-for-a-settlement-date": (
         "records bars and trades as Tradier publishes them; never computes a settlement date"
+    ),
+    "records-an-outcome": "Tradier's stock data lists no event contract, so states no outcome",
+    "restates-a-disputed-outcome": (
+        "Tradier's stock data lists no event contract, so states no outcome"
+    ),
+    "records-a-partial-payout": (
+        "Tradier's stock data lists no event contract, so states no outcome"
     ),
 }
 

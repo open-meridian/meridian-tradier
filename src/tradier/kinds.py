@@ -1,14 +1,18 @@
-"""The kinds of raw record connectivity keeps, and their windows (contract
-v16; meridian-design spec/an-edge-plugins-older-records-move-to-the-
+"""The kinds of raw record the account side keeps, and their windows
+(contract v16; meridian-design spec/an-edge-plugins-older-records-move-to-the-
 archive), from 0.6.0.
 
-Connectivity keeps what Tradier's brokerage API said, as its bytes arrived,
-before anything is converted from it (decisions/028), in two kinds, each in
-units the plugin can find again:
+Custody (from 0.7.0) and connectivity keep what Tradier's brokerage API
+said, as its bytes arrived, before anything is converted from it
+(decisions/028), in three kinds, each in units the plugin can find again:
 
-- `responses` ("Raw responses"): each read of the user's accounts and of an
-  account's orders, in a unit per UTC day (`responses/2026-10-13/`); 30 days
+- `responses` ("Raw responses"): each read of the user's accounts, an
+  account's balances, positions and orders, and the quotes naming a
+  holding's kind, in a unit per UTC day (`responses/2026-10-13/`); 30 days
   by default.
+- `activity` ("Reported activity", from 0.7.0, SnapTrade's kind): each page
+  of an account's history, a reported activity's raw record, in a unit per
+  month (`activity/2026-10/`); seven years by default, as SnapTrade's.
 - `trading` ("Trading", contract v22): each exchange with the brokerage API
   that places, changes or cancels an order, every rejection this plugin made
   with nothing sent, and each account trading was enabled on, in a unit per
@@ -47,13 +51,14 @@ from meridian.v1 import sidecar_pb2
 
 log = logging.getLogger("tradier.kinds")
 
-RESPONSES, TRADING = "responses", "trading"
+RESPONSES, ACTIVITY, TRADING = "responses", "activity", "trading"
 #: How long each kind stays in storage by default, in days.
-DEFAULT_WINDOWS = {RESPONSES: 30, TRADING: 2555}
+DEFAULT_WINDOWS = {RESPONSES: 30, ACTIVITY: 2555, TRADING: 2555}
 #: Which kinds are kept in a unit per month; the rest per day.
-MONTHLY = frozenset({TRADING})
+MONTHLY = frozenset({ACTIVITY, TRADING})
 KINDS = (
     RecordKind(RESPONSES, "Raw responses", window_days=DEFAULT_WINDOWS[RESPONSES]),
+    RecordKind(ACTIVITY, "Reported activity", window_days=DEFAULT_WINDOWS[ACTIVITY]),
     RecordKind(TRADING, "Trading", window_days=DEFAULT_WINDOWS[TRADING]),
 )
 #: What is done past a window: the SDK's three choices.

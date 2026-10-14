@@ -124,7 +124,8 @@ def test_no_key_value_and_no_price_is_ever_shown(tmp_path: Path) -> None:
     state.config = Config(credentials=KEY, token_set=True)
     state.source._entitled = Entitlements(answered=True, real_time=True)  # type: ignore[union-attr]
     use(state)
-    client = PageClient(pages)
+    # The sidecar's stand-in, for the custody pages' reads (from 0.7.0).
+    client = PageClient(pages, Recorder("tradier"))
     for path in (CONNECTION, DATASETS):
         text = client.get(path, "admin").text
         assert KEY.token not in text

@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.7.0 (unreleased)
+
+- On open-meridian 0.27.0 (contract 23): the pins moved as the SDK's
+  0.26.0 to 0.27.0 step moves them; meridian 0.1.43's checks.
+- The `custody` role, beside `data` and `connectivity`, in SnapTrade
+  0.16.0's shape: each account the token reaches (`/user/profile`), its
+  balances, positions, history and this session's orders, and the quotes
+  naming a holding's kind, read every **Read every** and reported in the
+  contract's words: each account's kind (retirement by its IRA
+  classification, else cash or margin by its type, another kept as
+  reported); its sync state; a statement as of the day in New York, a row
+  per position (its average cost derived from the cost basis) and the
+  cash, settled and pending derived from its unsettled fills and the
+  deployment's settlement dates, withheld while one has none; every history
+  event converted to its kind or kept as reported, each given a derived ID.
+- **Account currency** (the SDK's `account_currency`, contract v23):
+  Tradier states no currency, so the plugin's admin supplies each linked
+  account's; every amount carries it, supplied by that person, and nothing
+  needing it is reported until it is set (the product owner, 2026-10-13).
+- Custody's pages: **Account links** (`read_account_links`, `link_account`,
+  checked by `check_link_account`), **Statements** (`read_statements`) and
+  **History** (`read_account_activities`); **Raw records** serves custody
+  too. Settings: custody's **Read every**, **Stale after** and **Account
+  currency**. A third kind of raw record, `activity` (2555 days).
+- Connectivity, contract 23: an order placed in Tradier's own web app has
+  its fills reported on no placement, held unmatched until the desk's `ems`
+  accepts or answers them DK; the accept's placement takes the order's
+  later fills. Only fills after the plugin first watched the account are
+  reported (`trading/originated.json`). The catalogue's
+  `execution_acknowledgement` is none: Tradier takes none, so a DK tells it
+  nothing. Every fill names Tradier's order ID.
+- The suites: custody passes every case but 12 Tradier never presents, each
+  with why, `currency-not-stated` and
+  `resolve-gives-the-currency-with-its-provenance` on the supplied currency,
+  each resolve carrying its entry (`ResolveIdentifierRequest.provenance`);
+  connectivity passes every case but 11 not presented, among them
+  `reports-a-bust` (Tradier states no bust or correction) and
+  `reports-a-charge`; data marks v23's outcome cases not presented.
+- `make e2e`: the Account currency set, Tradier's account linked to the
+  e2e's account, its opening balance recorded from Tradier's statement by
+  the desk (now holding `operations` too); an order placed in Tradier's web
+  app reported on no placement and accepted to a new order; and after every
+  fill, the book reconciled against Tradier's statement with no break.
+
 ## 0.6.0 (unreleased)
 
 - The `connectivity` role (contract 22), beside `data`, in SnapTrade

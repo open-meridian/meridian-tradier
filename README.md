@@ -1,7 +1,8 @@
 # meridian-tradier
 
 Tradier's US equity and ETF market data in an [Open Meridian](https://open-meridian.dev)
-deployment, and the orders a desk places at Tradier. Two roles:
+deployment, its accounts as Tradier states them, and the orders a desk
+places at Tradier. Three roles:
 
 - `data`: daily closes and bars, live prices and quotes, and its time and
   sales as trades, put into the deployment's lake for the plugins that
@@ -9,16 +10,20 @@ deployment, and the orders a desk places at Tradier. Two roles:
 - `connectivity` (from 0.6.0, contract 22): the placements a desk's `ems`
   names this instance on, placed at Tradier, in its developer sandbox
   (paper trading) or live, and what Tradier did with them:
-  acknowledgements, rejections, changes, cancels, fills with their
-  settlement dates, and busts.
+  acknowledgements, rejections, changes, cancels, and fills with their
+  settlement dates; from 0.7.0 (contract 23) the fills of orders placed in
+  Tradier's own web app too, reported on no placement for the desk to
+  accept or answer DK.
+- `custody` (from 0.7.0, contract 23): Tradier's view of each account the
+  token reaches -- its positions and cash, settled and pending, and its
+  history -- which the deployment's operations reconcile the book against.
 
 It is the second half of the retail pair, beside
 [meridian-alpaca](https://github.com/open-meridian/plugin-alpaca): both
-pass the same suites of the SDK, unchanged. A `custody` role, Tradier's view
-of the account, follows in the next version.
+pass the same suites of the SDK, unchanged.
 
-**Status:** 0.6.0, on open-meridian 0.26.0 (contract 22), proven locally
-against core v22's runtime and plugin harness (8774368). Not released.
+**Status:** 0.7.0, on open-meridian 0.27.0 (contract 23), proven locally
+against core v23's runtime and plugin harness, built locally. Not released.
 
 ## What it serves
 
@@ -193,22 +198,72 @@ is), the plugin is a desk's connection to Tradier:
    about on the next read, by its tag, never sent again, across a restart
    too (`trading/sent.json` in the plugin's storage).
 
-An order the account holder places at Tradier outside the platform is left
-alone: no order is recorded and no fill reported (venue-originated fills are
-contract 23's). Every exchange that places, changes or cancels is kept as a
+An order the account holder places in Tradier's own web app (contract 23)
+is never recorded as an order: its fills are reported on no placement, the
+venue account code, instrument, side and Tradier's order ID named, and wait
+in the book unmatched until the desk's `ems` accepts them or answers them
+DK. Tradier takes no execution acknowledgement, so it is told nothing
+either way (the catalogue's `execution_acknowledgement` is none). Once
+accepted, the order's later fills go on the placement the accept created.
+Only fills after the plugin first watched the account are reported: an
+order filled before then is the account's history, which its opening
+balance holds. Every exchange that places, changes or cancels is kept as a
 raw record of the `trading` kind (seven years by default, an admin's
 setting, archived, kept or deleted past it), and each read under
 `responses` (30 days); **Raw records** (Open and View) follows a fact's
 reference to the record, for a person who may read the account.
 
 What Tradier never states, the plugin does not invent: a fill's place of
-execution, a locate, and a fee charged on a placement that filled nothing.
-The connectivity suite's case for a charge is therefore not produced, until
-the product owner rules on it.
+execution, a locate, a fee charged on any order, and a bust or correction
+(its order statuses have none). The connectivity suite marks those cases
+not presented, with why, as it marks a value-date roll; every other case
+passes.
+
+## The accounts at Tradier
+
+With the `custody` role (from 0.7.0), the plugin reads each account the
+token reaches every **Read every** (300 seconds by default; **Stale after**,
+36 hours, says how long it may go unanswered before an account is reported
+stale), from `/user/profile`, and each account's `/balances`, `/positions`,
+`/history` and this session's `/orders`, with `/markets/quotes` for a
+holding's kind; each answer a raw record first:
+
+1. **Account currency** (Settings, the SDK's `account_currency`): Tradier
+   states no currency for any holding or amount, so the plugin's admin
+   supplies each linked account's, or one for every account. Every amount
+   then carries it with its provenance, supplied by that person; until a
+   row covers an account, its statements and activity are not reported.
+2. A deployment admin grants the plugin the accounts it may link to; its
+   admin links each Tradier account to one of them on **Account links**
+   (under Manage), or, a deployment admin, to a new account created in one
+   step. Nothing is reported for an account nothing links.
+3. Each read reports each account's kind (an IRA's classification a
+   retirement account; `cash`, `margin` and `pdt` by its type), its sync
+   state (current, needs sign-in when Tradier refuses the token, disabled
+   when it says the account is closed, stale), and a statement as of the day
+   in New York: a row per position, its average cost the cost basis over
+   the quantity, and the cash. Tradier states no settled quantity: each fill
+   not yet settled (its history's trades, updated nightly, and this
+   session's filled orders) is pending on the deployment's settlement date
+   for it, and the statement waits while one has none.
+4. Its history: trades, dividends, interest, fees, taxes, journals,
+   deposits and withdrawals by ACH, wire or check, transfers, any other
+   type kept as reported, each given a derived ID (Tradier gives an event
+   none). **Statements** and **History** (Open and View) show them to a
+   person who may read the linked account; a raw record kept under
+   `activity` (seven years by default).
+
+The custody suite passes but for the cases Tradier never presents, each
+marked not presented with why (a connection late by design or holdings not
+served, a money market fund counted in cash, a reinvestment, a split or
+other corporate action, a plan's own fund code, a calendar's days);
+`currency-not-stated` and `resolve-gives-the-currency-with-its-provenance`
+pass on the supplied currency, each resolve carrying its provenance, as the
+product owner ruled (2026-10-13).
 
 **Tradier's developer sandbox serves no account history** (its history is
-updated nightly, and only on live accounts), so what a later version reads
-of an account's activity it reads live only.
+updated nightly, and only on live accounts), so custody reads an
+account's activity live only.
 
 **The sandbox run is the product owner's, by hand.** The tests and the e2e
 trade with a simulated brokerage (src/tradier/synthetic_broker.py) and never
@@ -238,8 +293,8 @@ own machine; CI never runs it.
 
 ## Building it
 
-    make ci-local        lint, the tests (the SDK's data and connectivity suites among them), meridian plugin check, the image, and the e2e
-    make e2e             the plugin on core's plugin harness, on sample data, with no token (e2e/run.py), the order path among it (e2e/orders.py)
+    make ci-local        lint, the tests (the SDK's data, custody and connectivity suites among them), meridian plugin check, the image, and the e2e
+    make e2e             the plugin on core's plugin harness, on sample data, with no token (e2e/run.py), the order path, custody and a reconciliation among it (e2e/orders.py)
     make preview         the pages on sample data, for a browser beside the kit
     make install-hooks   push runs ci-local first
 

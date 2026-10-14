@@ -54,6 +54,14 @@ SIDES: dict[int, str] = {
     ops.SIDE_SELL: "sell",
     ops.SIDE_SELL_SHORT: "sell_short",
 }
+#: The contract's side for each of Tradier's words for an equity order's
+#: (`side`), for a fill on no placement (contract v23).
+SIDES_SAID: dict[str, int] = {
+    "buy": ops.SIDE_BUY,
+    "buy_to_cover": ops.SIDE_BUY,
+    "sell": ops.SIDE_SELL,
+    "sell_short": ops.SIDE_SELL_SHORT,
+}
 ORDER_TYPES: dict[int, str] = {
     ops.ORDER_TYPE_MARKET: "market",
     ops.ORDER_TYPE_LIMIT: "limit",
@@ -99,6 +107,7 @@ def order_of(said: Any) -> VenueOrder:
         client_order_id=str(held.get("tag") or ""),
         status=str(held.get("status") or ""),
         symbol=str(held.get("symbol") or ""),
+        side=str(held.get("side") or ""),
         quantity=trading.number(held.get("quantity")),
         filled=trading.number(held.get("exec_quantity")) or Decimal(0),
         average=trading.number(held.get("avg_fill_price")) or None,
@@ -119,6 +128,7 @@ class TradierVenue:
 
     statuses: dict[str, str] = STATUSES
     sides: dict[int, str] = SIDES
+    sides_said: dict[str, int] = SIDES_SAID
     source: str = SOURCE
 
     def __init__(self, broker: Broker) -> None:
