@@ -1,24 +1,38 @@
 """Synthetic Tradier's brokerage API: a simulated brokerage behind the shapes of
-Tradier's user profile and an account's orders, for sample data, the tests
-and `make e2e` (from 0.6.0).
+Tradier's user profile and an account's balances, positions, history and
+orders, and its quotes' security types, for sample data, the tests and
+`make e2e` (from 0.6.0; the account's balances, positions and history from
+0.7.0).
 
 SIMULATED ONLY. Nothing here reaches Tradier, its developer sandbox or any
 brokerage: an order "placed" here is a line in this module's state, and
-every answer is shaped like Tradier's own (its profile, its order, its
-errors), invented, every value of it. A sandbox run against Tradier is the
+every answer is shaped like Tradier's own (its profile, its balances, its
+positions, its history, its order, its quote, its errors), invented, every
+value of it. A sandbox run against Tradier is the
 product owner's alone, by hand, and never this.
 
 It is a `broker.Send`: broker.py speaks to it exactly as to Tradier, so the
 same code is exercised. What it holds survives the plugin's restart, as a
 brokerage's orders do: a JSON file in the plugin's storage
 (`synthetic-venue/orders.json`), written whole on every change; with none
-given (a test) it lives in the process.
+given (a test) it lives in the process. Where the file changes beside it
+(an order placed in Tradier's own web app, `place_at_the_brokerage`), the
+next request reads it again.
 
-The user reaches one margin account, `SYN-TRD-1001`, which holds one order
-from the start: three AAPL bought at the brokerage outside the platform
-(`9000001`, no tag), the order a test and the e2e show the plugin reads and
-leaves alone (no order recorded, no fill reported: venue-originated fills
-are v23's).
+The user reaches one margin account, `SYN-TRD-1001`, opened on 2026-09-01
+with a deposit of 100,000 dollars by ACH, which holds one order from the
+start: three AAPL bought at the brokerage outside the platform on
+2026-09-02 (`9000001`, no tag), which paid a dividend on 2026-09-15: the
+history custody reads, and an order filled before the plugin watched the
+account, which connectivity leaves alone. An order placed in Tradier's own
+web app later (`place_at_the_brokerage`, no tag) is worked as any other,
+and its fills are the venue-originated fills connectivity reports on no
+placement (contract v23).
+
+Each fill is also a `trade` in the account's history, dated its day, which
+the history lists from the day after, as Tradier's is updated nightly; the
+positions (each with its cost basis) and the cash are what the fills, the
+deposit and the dividend come to, a bust taking its fill back.
 
 How it works an order, each read of the account's orders taking it one step
 on, so a test and the e2e see every state:
@@ -74,6 +88,9 @@ FILLS_AT_ONCE = Decimal(100)
 PRICES = {"AAPL": Decimal("227.41"), "SPY": Decimal("575.44")}
 PRICE = Decimal("100.00")
 OUTSIDE_ID = 9000001
+DEPOSIT = Decimal("100000.00")
+#: Each synthetic symbol's security type, as Tradier's quote states it.
+TYPES = {"AAPL": "stock", "SPY": "etf"}
 WORKING = ("open", "partially_filled", "pending", ODD_STATUS)
 
 
@@ -105,7 +122,48 @@ def _seeded() -> dict[str, Any]:
         "transaction_date": "2026-09-02T14:31:01.000Z",
         "class": "equity",
     }
-    return {"next": 1, "orders": [outside]}
+    return {
+        "next": 1,
+        "orders": [outside],
+        "events": [
+            {
+                "amount": _text(DEPOSIT),
+                "date": "2026-09-01T00:00:00Z",
+                "type": "ach",
+                "ach": {"description": "ACH DEPOSIT", "quantity": "0"},
+            },
+            {
+                "amount": "-678.30",
+                "date": "2026-09-02T00:00:00Z",
+                "type": "trade",
+                "trade": {
+                    "commission": "0",
+                    "description": "APPLE INC COM",
+                    "price": "226.10",
+                    "quantity": "3",
+                    "symbol": "AAPL",
+                    "trade_type": "Equity",
+                },
+            },
+            {
+                "amount": "0.75",
+                "date": "2026-09-15T00:00:00Z",
+                "type": "dividend",
+                "dividend": {"description": "APPLE INC COM", "quantity": "0"},
+            },
+        ],
+    }
+
+
+def place_at_the_brokerage(
+    state: Path, symbol: str, quantity: str, side: str = "buy", now: datetime | None = None
+) -> int:
+    """An order placed in Tradier's own web app, outside the platform,
+    written to the simulated brokerage's state beside it (the e2e's way in,
+    and a test's): a market order with no tag, worked from the next read on.
+    Its ID."""
+    broker = SyntheticBroker(lambda: now or datetime.now(UTC), state)
+    return broker.at_the_brokerage(symbol, quantity, side)
 
 
 class SyntheticBroker:
@@ -114,6 +172,7 @@ class SyntheticBroker:
     def __init__(self, now: Callable[[], datetime], state: Path | None = None) -> None:
         self._now = now
         self._file = state
+        self._stamp: float = 0.0
         self.held: dict[str, Any] = {}
         #: Every request asked of it: method and path.
         self.asked: list[tuple[str, str]] = []
@@ -127,6 +186,51 @@ class SyntheticBroker:
             except (OSError, ValueError):
                 held = None
         self.held = held if isinstance(held, dict) and "orders" in held else _seeded()
+        self.held.setdefault("events", [])
+        self._stamp = self._mtime()
+
+    def _mtime(self) -> float:
+        try:
+            return self._file.stat().st_mtime if self._file is not None else 0.0
+        except OSError:
+            return 0.0
+
+    def _reload_if_changed(self) -> None:
+        """The state as written beside this process (an order placed in
+        Tradier's own web app), read again where the file changed."""
+        if self._file is not None and self._mtime() != self._stamp:
+            self._load()
+
+    def at_the_brokerage(self, symbol: str, quantity: str, side: str = "buy") -> int:
+        """An order placed in Tradier's own web app: a market order with no
+        tag, worked from the next read on."""
+        self._reload_if_changed()
+        now = _stamp(self._now())
+        number = 9100000 + int(self.held["next"])
+        self.held["next"] = int(self.held["next"]) + 1
+        self.held["orders"].append(
+            {
+                "id": number,
+                "type": "market",
+                "symbol": symbol,
+                "side": side,
+                "quantity": quantity,
+                "status": "open",
+                "duration": "day",
+                "price": None,
+                "stop_price": None,
+                "avg_fill_price": "0",
+                "exec_quantity": "0",
+                "last_fill_price": "0",
+                "last_fill_quantity": "0",
+                "remaining_quantity": quantity,
+                "create_date": now,
+                "transaction_date": now,
+                "class": "equity",
+            }
+        )
+        self._save()
+        return number
 
     def _save(self) -> None:
         if self._file is None:
@@ -140,6 +244,7 @@ class SyntheticBroker:
         except BaseException:
             Path(written).unlink(missing_ok=True)
             raise
+        self._stamp = self._mtime()
 
     def __call__(
         self, method: str, url: str, headers: Mapping[str, str], body: bytes | None
@@ -147,7 +252,11 @@ class SyntheticBroker:
         parsed = urllib.parse.urlparse(url)
         path = parsed.path.removeprefix("/v1")
         self.asked.append((method, path))
+        self._reload_if_changed()
         asked = {k: v[0] for k, v in urllib.parse.parse_qs((body or b"").decode()).items()}
+        query = {k: v[0] for k, v in urllib.parse.parse_qs(parsed.query).items()}
+        if method == "GET" and path == "/markets/quotes":
+            return _ok(self._quotes(query.get("symbols", "")))
         if method == "GET" and path == "/user/profile":
             return _ok(
                 {
@@ -157,6 +266,7 @@ class SyntheticBroker:
                         "account": {
                             "account_number": ACCOUNT_NUMBER,
                             "classification": "individual",
+                            "date_created": "2026-09-01T13:05:00.000Z",
                             "type": "margin",
                             "status": "active",
                             "day_trader": False,
@@ -165,7 +275,15 @@ class SyntheticBroker:
                     }
                 }
             )
-        prefix = f"/accounts/{ACCOUNT_NUMBER}/orders"
+        account = f"/accounts/{ACCOUNT_NUMBER}"
+        if method == "GET" and path == f"{account}/balances":
+            return _ok(self._balances())
+        if method == "GET" and path == f"{account}/positions":
+            held = self._positions()
+            return _ok({"positions": {"position": held} if held else "null"})
+        if method == "GET" and path == f"{account}/history":
+            return _ok(self._history(query))
+        prefix = f"{account}/orders"
         if not path.startswith(prefix):
             return _refused(400, "Invalid Parameter: account_id")
         rest = path.removeprefix(prefix).strip("/")
@@ -291,7 +409,135 @@ class SyntheticBroker:
                 last_fill_price=_text(price),
                 remaining_quantity=_text(total - filled),
             )
+            self._traded(order, filled - before, price, now)
         order["transaction_date"] = _stamp(now + timedelta(milliseconds=1))
+
+    def _traded(
+        self, order: dict[str, Any], quantity: Decimal, price: Decimal, at: datetime
+    ) -> None:
+        """A step's fill, as a `trade` in the account's history, dated its day."""
+        sells = str(order["side"]).startswith("sell")
+        units = -quantity if sells else quantity
+        self.held["events"].append(
+            {
+                "amount": _text(-units * price),
+                "date": at.strftime("%Y-%m-%dT00:00:00Z"),
+                "type": "trade",
+                "trade": {
+                    "commission": "0",
+                    "description": f"{order['symbol']} {order['side']}",
+                    "price": _text(price),
+                    "quantity": _text(units),
+                    "symbol": order["symbol"],
+                    "trade_type": "Equity",
+                },
+                "order_id": order["id"],
+            }
+        )
+
+    # ── The account's balances, positions, history and quotes ──────────
+
+    def _busted(self) -> set[Any]:
+        return {
+            o["id"]
+            for o in self.held["orders"]
+            if o["symbol"] == BUSTED and o["status"] == "canceled"
+        }
+
+    def _trades(self) -> list[dict[str, Any]]:
+        busted = self._busted()
+        return [
+            e
+            for e in self.held["events"]
+            if e["type"] == "trade" and e.get("order_id") not in busted
+        ]
+
+    def _positions(self) -> list[dict[str, Any]]:
+        held: dict[str, tuple[Decimal, Decimal, str]] = {}
+        for event in self._trades():
+            trade = event["trade"]
+            quantity, cost, first = held.get(trade["symbol"], (Decimal(0), Decimal(0), ""))
+            units = Decimal(trade["quantity"])
+            held[trade["symbol"]] = (
+                quantity + units,
+                cost + units * Decimal(trade["price"]),
+                first or event["date"],
+            )
+        return [
+            {
+                "cost_basis": _text(cost),
+                "date_acquired": first,
+                "id": 130000 + n,
+                "quantity": _text(quantity),
+                "symbol": symbol,
+            }
+            for n, (symbol, (quantity, cost, first)) in enumerate(sorted(held.items()))
+            if quantity != 0
+        ]
+
+    def _balances(self) -> dict[str, Any]:
+        cash = Decimal(0)
+        for event in self.held["events"]:
+            if event["type"] == "trade" and event.get("order_id") in self._busted():
+                continue
+            cash += Decimal(event["amount"])
+        long_value = sum(
+            (Decimal(p["quantity"]) * PRICES.get(p["symbol"], PRICE) for p in self._positions()),
+            Decimal(0),
+        )
+        return {
+            "balances": {
+                "account_number": ACCOUNT_NUMBER,
+                "account_type": "margin",
+                "total_cash": _text(cash),
+                "total_equity": _text(cash + long_value),
+                "long_market_value": _text(long_value),
+                "market_value": _text(long_value),
+                "short_market_value": "0",
+                "pending_orders_count": sum(
+                    1 for o in self.held["orders"] if o["status"] in WORKING
+                ),
+                "uncleared_funds": "0",
+                "pending_cash": "0",
+                "margin": {
+                    "fed_call": "0",
+                    "maintenance_call": "0",
+                    "stock_buying_power": _text(cash * 2),
+                    "option_buying_power": _text(cash),
+                    "sweep": "0",
+                },
+            }
+        }
+
+    def _history(self, query: Mapping[str, str]) -> dict[str, Any]:
+        """The account's history from `start`'s day, a page of `limit`: each
+        event from the day after its own, as Tradier updates it nightly."""
+        today = self._now().strftime("%Y-%m-%d")
+        start = query.get("start", "")
+        limit, page = int(query.get("limit", "25")), int(query.get("page", "1"))
+        shown = [
+            {k: v for k, v in e.items() if k != "order_id"}
+            for e in self.held["events"]
+            if e["date"][:10] < today and (not start or e["date"][:10] >= start)
+        ]
+        shown = shown[(page - 1) * limit : page * limit]
+        if not shown:
+            return {"history": "null"}
+        return {"history": {"event": shown if len(shown) != 1 else shown[0]}}
+
+    def _quotes(self, symbols: str) -> dict[str, Any]:
+        quoted = [
+            {
+                "symbol": symbol,
+                "description": f"{symbol} (synthetic)",
+                "exch": "Q",
+                "type": TYPES.get(symbol, "stock"),
+                "last": _text(PRICES.get(symbol, PRICE)),
+            }
+            for symbol in symbols.split(",")
+            if symbol
+        ]
+        return {"quotes": {"quote": quoted if len(quoted) != 1 else quoted[0]}}
 
 
 def _ok(value: Any) -> Response:

@@ -37,11 +37,12 @@ lost some catches up from the lake). A summary, not legal advice; the README
 says the same.
 
 **The storage**, at the edge (decisions/028): Tradier's raw responses, every
-row's raw record, and the product map. From 0.6.0 connectivity keeps two
-kinds of raw record (kinds.py), each with its own window an admin of the
-plugin sets: `responses` (each read of the accounts and their orders, 30
-days) and `trading` (each exchange that places, changes or cancels, seven
-years), both archivable. The retention is the longest window, the data
+row's raw record, and the product map. The account side keeps three kinds
+of raw record (kinds.py), each with its own window an admin of the plugin
+sets: `responses` (each read of the accounts, their balances, positions and
+orders, 30 days), `activity` (from 0.7.0, custody's: each page of an
+account's history, seven years) and `trading` (each exchange that places,
+changes or cancels, seven years), all archivable. The retention is the longest window, the data
 role's raw responses kept within it.
 """
 

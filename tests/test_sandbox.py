@@ -78,7 +78,12 @@ def state_for(tmp: Path, sandbox: bool, transport: Scripted) -> State:
 
 
 def test_the_environment_is_declared_first_and_one_token_serves_either() -> None:
-    first, token, sample = SETTINGS
+    first, token, poll, stale, currency, sample = SETTINGS
+    # Custody's "Read every", "Stale after" and "Account currency" (from
+    # 0.7.0), its own.
+    assert (poll.name, stale.name) == ("poll_seconds", "stale_after_hours")
+    assert currency.name == "account_currency" and currency.label == "Account currency"
+    assert poll.roles == stale.roles == currency.roles == ("custody",)
     assert first.name == ENVIRONMENT and first.required and first.default == "live"
     assert [c.value for c in first.choices] == ["live", "sandbox"] and first.label == "Environment"
     assert token.name == TOKEN and token.secret and token.required

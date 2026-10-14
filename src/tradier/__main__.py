@@ -24,7 +24,11 @@ deployment launched it with `connectivity`: it hears each placement naming
 its instance and places it at Tradier in the environment chosen (live, or
 the developer sandbox's paper trading), reads the account's orders on a
 poll, Tradier streaming none on its sandbox, and honours the firm's pauses
-and stops (trading.py). Sample data trades with a simulated brokerage
+and stops, and from 0.7.0 reports the fills of orders placed in Tradier's
+own web app on no placement (trading.py). From 0.7.0, where launched with
+`custody`, it is the custodian of each account the token reaches too: it
+reads them every Read every, reporting their positions, cash and history
+(custody.py). Sample data trades with, and reads, a simulated brokerage
 (synthetic_broker.py), never Tradier.
 
 It holds nothing it cannot lose: what each subject's symbol is, and every
@@ -51,6 +55,7 @@ from meridian import edge
 
 from .broker import Broker
 from .convert import spelled
+from .custody import Syncer
 from .declaration import DECLARATION
 from .kinds import Store, tend, windows_from
 from .kinds import root as kinds_root
@@ -62,7 +67,7 @@ from .source import TradierSource
 from .stream import Feed, FeedError, Refused, Streamer, TradierFeed
 from .synthetic import SyntheticFeed, SyntheticTransport, exchange
 from .synthetic_broker import SyntheticBroker
-from .trading import Noted, Trader, trading_files
+from .trading import Noted, Trader, Watched, trading_files
 from .vendor import API, SANDBOX, NoKey, Tradier, Transport, VendorError, urllib_transport
 from .venue import TradierVenue
 
@@ -77,6 +82,8 @@ LICENCES_SECONDS = 60
 #: order on each read.
 POLL_SECONDS = 5
 SYNTHETIC_POLL_SECONDS = 1
+#: How often custody reads the simulated brokerage, in place of Read every.
+SYNTHETIC_READ_SECONDS = 5
 #: How often the kinds' windows are tended between deliveries of settings.
 TEND_SECONDS = 3600
 
@@ -209,12 +216,14 @@ async def watch_settings(
     store: RawStore,
     configured: asyncio.Event,
     account: Account | None = None,
+    woken: asyncio.Event | None = None,
 ) -> None:
     async for delivered in plugin.settings():
         state.config = config_from(delivered.values)
         state.values = dict(delivered.values)
         if account is not None:
-            account.use(state.config)
+            if account.use(state.config) and woken is not None:
+                woken.set()
             seconds = SYNTHETIC_POLL_SECONDS if state.config.sample_data else POLL_SECONDS
             state.polled = f"Polled every {seconds}s: Tradier streams no orders on its sandbox"
         state.tradier, state.source = source_for(state.config, store)
@@ -248,11 +257,27 @@ async def tend_hourly(plugin: meridian.Plugin, state: State, kinds: Store) -> No
         await tend_now(plugin, kinds, state.values)
 
 
-async def follow_scope(plugin: meridian.Plugin, state: State) -> None:
-    """The account scope and its ems's venue account map (W11.22), on start
-    and on every change: connectivity and its pages hold it from here."""
+async def follow_scope(plugin: meridian.Plugin, state: State, woken: asyncio.Event) -> None:
+    """The account scope, its links (W4.11) and its ems's venue account map
+    (W11.22), on start and on every change: the account side and its pages
+    hold it from here, and custody reads again at once."""
     async for scope in plugin.account_scope():
         state.scope = scope
+        woken.set()
+
+
+async def custody_reads(state: State, syncer: Syncer, woken: asyncio.Event) -> None:
+    """Read Tradier now, then every Read every, or sooner when the settings
+    or the links change."""
+    while True:
+        woken.clear()
+        try:
+            await syncer.run_once()
+        except meridian.MeridianError as failed:
+            log.warning("this read of the accounts stopped: %s", failed)
+        wait = SYNTHETIC_READ_SECONDS if state.config.sample_data else state.config.poll_seconds
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(woken.wait(), timeout=wait)
 
 
 async def trade(state: State, trader: Trader, hear: bool) -> None:
@@ -305,6 +330,9 @@ async def run() -> None:
         interface=meridian.Interface(port=port, title=TITLE, pages=pages),
         settings=DECLARED,
         declaration=DECLARATION,
+        # Custody names each account by Tradier's number, which an admin of
+        # the plugin links to one of the deployment's accounts (W6.4).
+        reads_external_accounts=True,
     ) as plugin:
         roles = set(plugin.identity.roles)
         log.info(
@@ -317,8 +345,18 @@ async def run() -> None:
         streamer = Streamer(lambda: feed_for(state, store), lake.heard, lake.flush)
         lake.streamer = state.streamer = streamer
         account = Account(kinds, granted)
+        woken = asyncio.Event()
+        if "custody" in roles:
+            state.syncer = Syncer(
+                plugin,
+                lambda: account.broker,
+                paper=lambda: state.config.paper and not state.config.sample_data,
+                stale_after=lambda: state.config.stale_after,
+                linked=lambda number: state.scope.link_of(number) is not None,
+                currencies=lambda: [dict(row) for row in state.config.account_currency],
+            )
         if "connectivity" in roles:
-            sent, enabled = trading_files(granted)
+            sent, enabled, originated = trading_files(granted)
             state.trader = Trader(
                 plugin,
                 lambda: account.venue,
@@ -327,24 +365,33 @@ async def run() -> None:
                 enabled=Noted(enabled),
                 # The venue account codes its ems mapped on it (W11.22).
                 scope=lambda: state.scope,
+                watched=Watched(originated),
             )
         configured = asyncio.Event()
         page = serve(plugin, state, port)
         tasks = [
             asyncio.create_task(
                 again(
-                    lambda: watch_settings(plugin, state, store, configured, account),
+                    lambda: watch_settings(plugin, state, store, configured, account, woken),
                     "the settings",
                 )
             )
         ]
         await configured.wait()
-        if state.trader is not None:
-            trader = state.trader
+        if roles & {"custody", "connectivity"}:
             tasks.append(
-                asyncio.create_task(again(lambda: follow_scope(plugin, state), "the scope"))
+                asyncio.create_task(again(lambda: follow_scope(plugin, state, woken), "the scope"))
             )
             tasks.append(asyncio.create_task(tend_hourly(plugin, state, kinds)))
+        if state.syncer is not None:
+            syncer = state.syncer
+            tasks.append(
+                asyncio.create_task(
+                    again(lambda: custody_reads(state, syncer, woken), "custody's reads")
+                )
+            )
+        if state.trader is not None:
+            trader = state.trader
             # With the data role too, its placements are heard on the one
             # stream that hears the lake's wants (below).
             hears = "data" not in roles
@@ -357,6 +404,7 @@ async def run() -> None:
             if state.trader is not None:
                 hearing["placement_updated"] = state.trader.on_placement
                 hearing["trading_instruction_changed"] = state.trader.on_instruction
+                hearing["execution_recorded"] = state.trader.on_execution
             tasks.append(
                 asyncio.create_task(again(lambda: plugin.receive(**hearing), "hearing the lake"))
             )

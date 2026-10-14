@@ -1,13 +1,16 @@
-"""Tradier's brokerage API, for its orders: the one module that speaks to it
-for connectivity (from 0.6.0).
+"""Tradier's brokerage API, for its accounts and orders: the one module that
+speaks to it for custody (from 0.7.0) and connectivity (from 0.6.0).
 
-Connectivity trades through the environment chosen (settings.py): Tradier's
-API, `https://api.tradier.com/v1`, with a Tradier Brokerage account's token,
-or its developer sandbox, `https://sandbox.tradier.com/v1`, the same API
-paper trading with simulated money. It reads `GET /user/profile` (the
-accounts the token reaches, by their numbers, each a venue account code) and
-`GET /accounts/{id}/orders` (the account's orders this session, with their
-tags), and places, changes and cancels an equity order with
+The account side reads and trades through the environment chosen
+(settings.py): Tradier's API, `https://api.tradier.com/v1`, with a Tradier
+Brokerage account's token, or its developer sandbox,
+`https://sandbox.tradier.com/v1`, the same API paper trading with simulated
+money. Both read `GET /user/profile` (the accounts the token reaches, by
+their numbers, each a venue account code) and `GET /accounts/{id}/orders`
+(the account's orders this session, with their tags). Custody reads too
+`GET /accounts/{id}/balances`, `GET /accounts/{id}/positions`,
+`GET /accounts/{id}/history` and `GET /markets/quotes` (a holding's kind and
+description). Connectivity places, changes and cancels an equity order with
 `POST /accounts/{id}/orders`, `PUT /accounts/{id}/orders/{order_id}` and
 `DELETE /accounts/{id}/orders/{order_id}`, each form-encoded as Tradier
 takes it.
@@ -19,10 +22,11 @@ is asked.
 
 **Every exchange is a raw record first** (kinds.py), with its request and
 the moment its answer arrived, before anything reads it: a read under
-`responses`, a send under `trading`. A send that never got an answer is
-kept too, saying so, and raises `Unanswered`: it may have reached Tradier,
-and is never sent again on its own (trading.py). Tradier's numbers are JSON
-numbers; a body is parsed with every number a Decimal from its own text.
+`responses`, a page of history under `activity`, a send under `trading`. A
+send that never got an answer is kept too, saying so, and raises
+`Unanswered`: it may have reached Tradier, and is never sent again on its
+own (trading.py). Tradier's numbers are JSON numbers; a body is parsed with
+every number a Decimal from its own text.
 
 **Rate limits.** Tradier allows a token 120 brokerage calls a minute; this
 client spends at most sixty, one at a time (vendor.RateLimiter). A 429 is
@@ -47,12 +51,14 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from .kinds import RESPONSES, TRADING, Store
+from .kinds import ACTIVITY, RESPONSES, TRADING, Store
 from .settings import Credentials
 from .vendor import REDACTED, RateLimiter, Response, parse
 
-USER_AGENT = "meridian-tradier/0.6.0 (+https://open-meridian.dev)"
+USER_AGENT = "meridian-tradier/0.7.0 (+https://open-meridian.dev)"
 LIMIT_PER_MINUTE = 60
+#: The most history events one page asks for.
+HISTORY_PAGE = 100
 KEPT_HEADERS = ("date", "content-type", "x-ratelimit-available", "x-ratelimit-expiry")
 
 #: One request: its method, URL, headers and form body, answered.
@@ -245,6 +251,56 @@ class Broker:
             f"/accounts/{urllib.parse.quote(account)}/orders",
             {"includeTags": "true"},
         )
+
+    # ── Custody's reads, from 0.7.0 ─────────────────────────────────────
+
+    def balances(self, account: str) -> Answer:
+        """The account's balances: its cash, as Tradier states it now."""
+        return self._ask(
+            "balances",
+            RESPONSES,
+            "balances",
+            "GET",
+            f"/accounts/{urllib.parse.quote(account)}/balances",
+        )
+
+    def positions(self, account: str) -> Answer:
+        """The account's positions, as Tradier states them now."""
+        return self._ask(
+            "positions",
+            RESPONSES,
+            "positions",
+            "GET",
+            f"/accounts/{urllib.parse.quote(account)}/positions",
+        )
+
+    def history(self, account: str, page: int = 1, start: str = "") -> Answer:
+        """One page of the account's history, from `start`'s day where given."""
+        params = {"page": str(page), "limit": str(HISTORY_PAGE)}
+        if start:
+            params["start"] = start
+        return self._ask(
+            "history",
+            ACTIVITY,
+            "history",
+            "GET",
+            f"/accounts/{urllib.parse.quote(account)}/history",
+            params,
+        )
+
+    def quotes(self, symbols: list[str]) -> Answer:
+        """Tradier's quotes for the symbols held: each one's kind and
+        description."""
+        return self._ask(
+            "quotes",
+            RESPONSES,
+            "quotes",
+            "GET",
+            "/markets/quotes",
+            {"symbols": ",".join(symbols), "greeks": "false"},
+        )
+
+    # ── Connectivity's sends ────────────────────────────────────────────
 
     def place(self, account: str, form: Mapping[str, str]) -> Answer:
         return self._ask(

@@ -1,8 +1,10 @@
 # tradier
 
 Tradier's US equity and ETF market data in an Open Meridian deployment's
-lake, as a data plugin (contract v20), and from 0.6.0 the orders a desk
-places at Tradier, as a connectivity plugin (contract v22). What is particular to this plugin first;
+lake, as a data plugin (contract v20), from 0.6.0 the orders a desk
+places at Tradier, as a connectivity plugin (contract v22), and from 0.7.0
+its accounts as Tradier states them, as a custody plugin (contract v23).
+What is particular to this plugin first;
 the rest of this file is the SDK template's guidance, which holds for it
 as for every plugin.
 
@@ -50,10 +52,20 @@ as for every plugin.
   enabling trading and the catalogue. `venue.py` is Tradier's words for it,
   `broker.py` the one module that speaks to its brokerage API (sandbox or
   live, every exchange a raw record first, `kinds.py`), `trading_page.py`
-  the Trading and Raw records pages.
+  the Trading and Raw records pages. From 0.7.0 an order placed in
+  Tradier's own web app has its fills reported on no placement
+  (`Originated`, `Watched`: `trading/originated.json`), and the placement
+  an accept creates is followed for its later fills.
+- `src/tradier/custody.py`: the custody role (from 0.7.0): each account the
+  token reaches, its balances, positions, history and this session's
+  orders, and the quotes naming a holding's kind, read and reported
+  (`Syncer`), every value closed rather than read carrying its provenance;
+  `custody_pages.py` the Account links, Statements and History pages.
 - `src/tradier/synthetic_broker.py`: a simulated brokerage behind the
   brokerage API's shapes, a symbol for each answer (`SYNREJ`, `SYNLOST`,
-  `SYNODD`, `SYNBUST`, `SYNREN`). The tests and the e2e trade with it alone.
+  `SYNODD`, `SYNBUST`, `SYNREN`), the account's balances, positions and
+  history, and orders placed in Tradier's own web app
+  (`place_at_the_brokerage`). The tests and the e2e trade with it alone.
   **Never call Tradier's sandbox or live brokerage API from a test, the e2e
   or a session, and never place, change or cancel a real or paper order**:
   the sandbox run is the product owner's, by hand.
