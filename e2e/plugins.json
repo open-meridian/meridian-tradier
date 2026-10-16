@@ -1,5 +1,5 @@
 [
-  {"instance": "tradier", "image": "tradier:local", "roles": ["data", "custody", "connectivity"]},
-  {"instance": "reader", "image": "tradier:local", "roles": ["custody", "reporting", "signal"]},
-  {"instance": "desk", "image": "tradier:local", "roles": ["portfolio", "oms", "ems", "reporting", "operations"]}
+  {"instance": "tradier", "image": "tradier:local", "roles": ["data", "custody", "connectivity"], "declaration": "declaration.json"},
+  {"instance": "reader", "image": "tradier:local", "roles": ["custody", "reporting", "signal"], "declaration": "reader.json"},
+  {"instance": "desk", "image": "tradier:local", "roles": ["portfolio", "oms", "ems", "reporting", "operations"], "declaration": "desk.json"}
 ]
