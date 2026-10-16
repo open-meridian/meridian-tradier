@@ -22,8 +22,11 @@ It is the second half of the retail pair, beside
 [meridian-alpaca](https://github.com/open-meridian/plugin-alpaca): both
 pass the same suites of the SDK, unchanged.
 
-**Status:** 0.8.0, on open-meridian 0.27.0 (contract 23), proven locally
-against core v23's runtime and plugin harness, built locally. Not released.
+**Status:** 0.9.0, on open-meridian 0.29.0 (contract 25): its whole
+declaration, and its documentation in [docs/](docs/), which a deployment
+shows on its Documentation tab; the daily dataset names the US equity
+calendar (contract 24's `calendar_id`). Not released; its pins to the SDK,
+the CLI and core v25 are marked placeholders until published.
 
 ## What it serves
 
