@@ -14,13 +14,16 @@ The data role's common settings, in its order
 connectivity's too, and from 0.7.0 custody's, each naming the roles it
 serves:
 
-- `environment` first, a required choice (`meridian.environment`): `live`,
-  Tradier's API with a brokerage account's token, or `sandbox`, Tradier's
-  developer sandbox (sandbox.tradier.com), for testing, its data delayed 15
-  minutes and with no stream. Before 0.3.0, `sandbox`, a switch. From 0.6.0
-  it is also the account connectivity trades, and from 0.7.0 the accounts
-  custody reads: on `live` the brokerage account's, real money; on
-  `sandbox` the developer sandbox's paper account, simulated money.
+- `environment` first, a required choice, the common setting's name, label
+  and values: `live`, Tradier's API with a brokerage account's token, or
+  `sandbox`, Tradier's developer sandbox (sandbox.tradier.com), for
+  testing, its data delayed 15 minutes and with no stream. From 0.6.0 it is
+  also the account connectivity trades, and from 0.7.0 the accounts custody
+  reads: on `live` the brokerage account's, real money; on `sandbox` the
+  developer sandbox's paper account, simulated money. From 0.7.1 it
+  defaults to `sandbox`, not the common setting's `live`, so Live is only
+  ever a person's choice (the product owner, 2026-10-14): an upgrade or an
+  unset value never turns the plugin Live.
 - the token, one required secret, `tradier_access_token`, for whichever
   environment is chosen, and for every role (the same token trades and
   reads the accounts): the
@@ -41,11 +44,18 @@ serves:
   only on a development deployment), serving the built-in recorded exchange
   (synthetic.py) instead of calling Tradier, with no token: what the e2e
   and a first look use.
+
+Before 0.3.0 the sandbox was a switch, `sandbox` (0.2.1). From 0.7.1 it is
+declared again, as a developer's setting, so a value saved under it is not
+lost: the sidecar delivers only the settings a plugin declares, and the
+dashboard's form leaves a setting it does not show as it is when it saves.
+It is read only while `environment` is unset (`environment_of`): on means
+Sandbox, off Live, as SnapTrade reads its 0.1.0 `snaptrade_personal_key`.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
 from datetime import timedelta
 
@@ -59,6 +69,8 @@ POLL_SECONDS = "poll_seconds"
 STALE_AFTER_HOURS = "stale_after_hours"
 ACCOUNT_CURRENCY = "account_currency"
 SAMPLE_DATA = "sample_data"
+#: 0.2.1's on/off for the developer sandbox, replaced by ENVIRONMENT.
+OLD_SANDBOX = "sandbox"
 #: What the plugin says of the sandbox, plainly, wherever it says which host.
 SANDBOX_SAID = "Tradier's developer sandbox: delayed 15 minutes, no streaming"
 #: The roles a setting serves: the token and the environment are every role's.
@@ -79,11 +91,18 @@ class Declared:
     """The settings as declared, in the data role's order: one typed class,
     the SDK's form, which `connect` and the declaration register."""
 
-    environment: str = meridian.environment(
+    # The common setting `environment` (meridian.environment), its name,
+    # label and values, but Sandbox by default: Live is a person's choice.
+    environment: str = meridian.setting(
+        "Environment",
+        required=True,
+        default=SANDBOX,
+        choices=(meridian.Choice(LIVE, "Live"), meridian.Choice(SANDBOX, "Sandbox")),
         description=(
             "Live: Tradier's API, with a Tradier Brokerage account's token, its orders real. "
             "Sandbox: Tradier's developer sandbox, for testing, its data delayed 15 minutes "
-            "and not streamed, its orders paper trading with simulated money."
+            "and not streamed, its orders paper trading with simulated money. Sandbox until "
+            "a person chooses Live."
         ),
         roles=EVERY_ROLE,
     )
@@ -116,6 +135,17 @@ class Declared:
             "Tradier states no currency for any holding or amount: the currency of each linked "
             "account, or of every one without a row. Nothing is reported for an account until "
             "one covers it."
+        ),
+    )
+    # 0.2.1's switch, a developer's setting, after the vendor's own and
+    # before sample data: read only while Environment is unset.
+    sandbox: bool = meridian.setting(
+        "Sandbox (the old way)",
+        developer=True,
+        roles=EVERY_ROLE,
+        description=(
+            "Replaced by Environment, read only while Environment is unset: on means Sandbox, "
+            "off Live. Kept so a value saved before 0.3.0 still counts."
         ),
     )
     sample_data: bool = meridian.sample_data(
@@ -160,7 +190,7 @@ class Config:
 
     credentials: Credentials | None = None
     token_set: bool = False
-    environment: str = LIVE
+    environment: str = SANDBOX
     sample_data: bool = False
     poll_seconds: int = DEFAULT_POLL_SECONDS
     stale_after: timedelta = timedelta(hours=DEFAULT_STALE_AFTER_HOURS)
@@ -185,10 +215,30 @@ class Config:
         return self.sample_data or self.credentials is not None
 
 
-def config_from(values: Mapping[str, object]) -> Config:
+def environment_of(values: Mapping[str, object], unset: Collection[str] = ()) -> str:
+    """The environment, as chosen, or as 0.2.1's `sandbox` said it.
+
+    `unset` names the settings the deployment holds nothing for, which the
+    sidecar's delivery lists among the required ones missing
+    (`Settings.missing_required`): the SDK fills a declared default into the
+    values, so an unset environment reads as the default there. While it is
+    unset, a saved `sandbox` decides, on Sandbox and off Live; with neither
+    saved it is Sandbox, the default. Live is never a fallback.
+    """
+    said = values.get(ENVIRONMENT)
+    if ENVIRONMENT not in unset and said in (LIVE, SANDBOX):
+        return str(said)
+    old = values.get(OLD_SANDBOX)
+    if isinstance(old, bool):
+        return SANDBOX if old else LIVE
+    return SANDBOX
+
+
+def config_from(values: Mapping[str, object], unset: Collection[str] = ()) -> Config:
     """The settings as delivered, typed: the one token, for the environment
-    chosen."""
-    environment = SANDBOX if values.get(ENVIRONMENT) == SANDBOX else LIVE
+    chosen, and the names of those the deployment holds nothing for
+    (`Settings.missing_required`), for `environment_of`."""
+    environment = environment_of(values, unset)
     token = str(values.get(TOKEN) or "")
     poll, stale = values.get(POLL_SECONDS), values.get(STALE_AFTER_HOURS)
     rows = values.get(ACCOUNT_CURRENCY)

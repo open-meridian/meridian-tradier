@@ -304,9 +304,11 @@ def run():
     for tool in ("tradier__read_connection", "tradier__read_datasets"):
         must(tool in listed_tools, f"step 7, {tool} is offered: {listed_tools}")
     # The data role's common fields, under its names, with Tradier's beside.
+    # Environment was never saved: Sandbox, the default (from 0.7.1), so Live
+    # is only ever a person's choice.
     connection = call("tradier__read_connection", {}, "unchanged")["data"]
-    must(connection["mode"] == "Sample data" and connection["environment"] == "live"
-         and [c["label"] for c in connection["credentials"]] == ["API access token"],
+    must(connection["mode"] == "Sample data" and connection["environment"] == "sandbox"
+         and [c["label"] for c in connection["credentials"]] == ["Sandbox access token"],
          f"step 7, read_connection: {connection}")
     must(connection["sessions"] == 1 and connection["stream"]["state"] == "streaming",
          f"step 7, the stream's session: {connection['stream']}")

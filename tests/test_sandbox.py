@@ -11,6 +11,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 
+import meridian
+import pytest
 from meridian.suites import Recorder
 from meridian.testing import PageClient
 
@@ -20,10 +22,15 @@ from tradier.page import CONNECTION, DATASETS, State, pages, use
 from tradier.raw import RawStore
 from tradier.settings import (
     ENVIRONMENT,
+    LIVE,
+    OLD_SANDBOX,
+    SANDBOX,
     SANDBOX_SAID,
     SETTINGS,
     TOKEN,
+    Config,
     config_from,
+    environment_of,
 )
 from tradier.stream import Streamer, TradierFeed
 from tradier.vendor import Response
@@ -77,24 +84,97 @@ def state_for(tmp: Path, sandbox: bool, transport: Scripted) -> State:
     return state
 
 
+BY_NAME = {setting.name: setting for setting in SETTINGS}
+
+
+def delivered(held: dict[str, str]) -> meridian.Settings:
+    """The settings as the SDK hands them over: typed, the declared defaults
+    filled in, and the required ones held nothing for named, as the sidecar
+    names them."""
+    defaults = {s.name: s.default for s in SETTINGS if s.default is not None}
+    values: dict[str, str | int | bool | list[dict[str, str]]] = {
+        **defaults,
+        **{name: BY_NAME[name]._parsed(text) for name, text in held.items()},
+    }
+    missing = tuple(s.name for s in SETTINGS if s.required and s.name not in held)
+    return meridian.Settings(values=values, missing_required=missing)
+
+
 def test_the_environment_is_declared_first_and_one_token_serves_either() -> None:
-    first, token, poll, stale, currency, sample = SETTINGS
+    first, token, poll, stale, currency, old, sample = SETTINGS
     # Custody's "Read every", "Stale after" and "Account currency" (from
     # 0.7.0), its own.
     assert (poll.name, stale.name) == ("poll_seconds", "stale_after_hours")
     assert currency.name == "account_currency" and currency.label == "Account currency"
     assert poll.roles == stale.roles == currency.roles == ("custody",)
-    assert first.name == ENVIRONMENT and first.required and first.default == "live"
+    # Sandbox by default (from 0.7.1): Live is a person's choice, and says so.
+    assert first.name == ENVIRONMENT and first.required and first.default == "sandbox"
     assert [c.value for c in first.choices] == ["live", "sandbox"] and first.label == "Environment"
+    assert [c.label for c in first.choices] == ["Live", "Sandbox"]
+    assert first.description.endswith("Sandbox until a person chooses Live.")
+    # 0.2.1's switch, declared again so a saved value reaches the plugin.
+    assert old.name == OLD_SANDBOX and old.kind is bool and old.developer
+    assert old.default is None and not old.required and old.roles == first.roles
+    assert old.description.startswith(
+        "Replaced by Environment, read only while Environment is unset"
+    )
     assert token.name == TOKEN and token.secret and token.required
     assert token.applies_when is None and token.label == "Access token"
     assert token.description.endswith("it must match Environment.")
     assert sample.name == "sample_data" and sample.developer
-    assert config_from({TOKEN: KEY}).on_sandbox is False
+    assert config_from({TOKEN: KEY}).on_sandbox is True
     # The value carries over whichever environment is chosen: nothing re-entered.
     for environment in ("live", "sandbox"):
         config = config_from({ENVIRONMENT: environment, TOKEN: KEY})
         assert config.credentials is not None and config.credentials.token == KEY
+
+
+# ── Live is a person's choice (0.7.1) ───────────────────────────────────────
+
+
+def test_an_unset_environment_is_the_sandbox() -> None:
+    # Nothing saved: the SDK fills in the default, and the sidecar names the
+    # environment missing.
+    settings = delivered({TOKEN: KEY})
+    assert settings.values[ENVIRONMENT] == SANDBOX and ENVIRONMENT in settings.missing_required
+    config = config_from(settings.values, settings.missing_required)
+    assert config.environment == SANDBOX and config.paper and config.on_sandbox
+    # However it arrives: absent, or a value that is not a choice.
+    assert config_from({TOKEN: KEY}).environment == SANDBOX
+    assert config_from({ENVIRONMENT: "", TOKEN: KEY}).environment == SANDBOX
+    assert config_from({ENVIRONMENT: "LIVE", TOKEN: KEY}).environment == SANDBOX
+    assert Config().environment == SANDBOX
+
+
+def test_live_is_read_only_once_a_person_chooses_it() -> None:
+    settings = delivered({ENVIRONMENT: LIVE, TOKEN: KEY})
+    assert settings.missing_required == ()
+    config = config_from(settings.values, settings.missing_required)
+    assert config.environment == LIVE and not config.paper and not config.on_sandbox
+
+
+@pytest.mark.parametrize(("old", "environment"), [("true", SANDBOX), ("false", LIVE)])
+def test_while_the_environment_is_unset_the_old_sandbox_decides(old: str, environment: str) -> None:
+    # Saved under 0.2.1: the token and the switch, and no environment, as the
+    # dev deployment held them when 0.7.0 came up on Live.
+    settings = delivered({TOKEN: KEY, OLD_SANDBOX: old})
+    assert settings.values[ENVIRONMENT] == SANDBOX  # the SDK's filled-in default
+    config = config_from(settings.values, settings.missing_required)
+    assert config.environment == environment
+    assert config.credentials is not None and config.credentials.token == KEY
+    assert environment_of(settings.values, settings.missing_required) == environment
+
+
+@pytest.mark.parametrize("old", ["true", "false"])
+def test_once_the_environment_is_saved_the_old_sandbox_is_not_read(old: str) -> None:
+    for said in (LIVE, SANDBOX):
+        settings = delivered({ENVIRONMENT: said, TOKEN: KEY, OLD_SANDBOX: old})
+        assert environment_of(settings.values, settings.missing_required) == said
+
+
+def test_with_neither_saved_the_environment_is_the_sandbox() -> None:
+    settings = delivered({})
+    assert environment_of(settings.values, settings.missing_required) == SANDBOX
 
 
 def test_on_it_asks_the_sandbox_marks_data_delayed_and_opens_no_stream(tmp_path: Path) -> None:
