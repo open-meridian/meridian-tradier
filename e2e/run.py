@@ -170,7 +170,7 @@ def answered(path, rows="prices"):
 
 def run():
     started = time.time()
-    compose("down", "-v", "--remove-orphans", check=False)
+    compose("--profile", "runner", "down", "-v", "--remove-orphans", check=False)
     compose("up", "-d")
     for instance in ("tradier", "reader", "desk"):
         runner("ready", "--instance", instance)
@@ -315,7 +315,7 @@ def run():
     datasets = call("tradier__read_datasets", {}, "unchanged")["data"]
     by_key = {d["key"]: d for d in datasets["served"]}
     must(by_key["daily"]["recorded"] >= 4
-         and by_key["live"]["recorded"] >= 1 and datasets["listings"] == 4
+         and by_key["live"]["recorded"] >= 1 and datasets["listings"] == 3
          and datasets["reads_instruments"] is True and datasets["streamed"] >= 2
          and datasets["backfills_a_restart"] is False
          and (RECORDED or by_key["trades"]["recorded"] >= 3),
@@ -333,7 +333,10 @@ def run():
                    "print(json.dumps(json.load(open(edge.storage_dir() / 'products.json'))))").stdout
     products = json.loads(kept)
     must(products.get(spy) == "SPY" and products.get(brk) == "BRK.B" and products.get(other) == "TQQQ"
-         and sorted(products.values()) == ["BRK.B", "SPY", "TQQQ", "TQQQ"],
+         # Contract v24: TQQQ's record is the platform's INS- record, by its
+         # FIGI, so Tradier's symbol joined to it names that record, never a
+         # second one (W3.1); before v24 a second record mapped TQQQ again.
+         and sorted(products.values()) == ["BRK.B", "SPY", "TQQQ"],
          f"step 8, the product map kept: {kept}")
     runner("ready", "--instance", "tradier")
 
@@ -395,7 +398,7 @@ def main():
         return 1
     finally:
         compose("logs", "--no-color", check=False)
-        compose("down", "-v", "--remove-orphans", check=False)
+        compose("--profile", "runner", "down", "-v", "--remove-orphans", check=False)
     return 0
 
 

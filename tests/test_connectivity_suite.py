@@ -24,7 +24,7 @@ from __future__ import annotations
 import asyncio
 
 from meridian.plugin.v1 import operations_pb2 as ops
-from meridian.suites import Recorder, names, run, suite
+from meridian.suites import ANSWERED_BY_SDK, Recorder, names, run, suite
 
 from tradier import synthetic_broker
 from trading_cases import Producer, Rig, placed_and_filled, placement
@@ -60,6 +60,10 @@ NOT_PRESENTED = {
     ),
     "re-reports-a-charge-on-the-accepted-placement": (
         "Tradier's orders carry no fee, its own web app's included, and its history names no order"
+    ),
+    "reports-a-give-up-rejected": (
+        "Tradier executes and clears each order in the account that placed it: no trade is "
+        "given up to a prime broker, so none is rejected"
     ),
     "reports-a-value-date-roll": (
         "Tradier's trades settle on their settlement dates: it rolls no spot position at a "
@@ -233,7 +237,8 @@ PRODUCERS: dict[str, Producer] = {
 
 
 def test_every_case_is_mapped_or_said_not_presented() -> None:
-    assert set(names("connectivity")) == set(PRODUCERS) | set(NOT_PRESENTED)
+    # Contract v24: the two cases every suite holds, which the SDK answers.
+    assert set(names("connectivity")) == set(PRODUCERS) | set(NOT_PRESENTED) | set(ANSWERED_BY_SDK)
     assert not set(PRODUCERS) & set(NOT_PRESENTED)
     held = {case.name: case.about or case.about_field for case in suite("connectivity").cases}
     assert all(held[name] for name in NOT_PRESENTED), "a required case is never skipped"
@@ -243,7 +248,7 @@ def test_every_case_of_the_connectivity_suite_passes_but_those_tradier_never_pre
     report = run("connectivity", PRODUCERS, not_presented=NOT_PRESENTED, instance_id="tradier")
     assert report.passed, report.failures
     assert report.not_presented == NOT_PRESENTED
-    assert set(report.passed_cases) == set(PRODUCERS)
+    assert set(report.passed_cases) == set(PRODUCERS) | set(ANSWERED_BY_SDK)
 
 
 def test_a_plugin_sending_on_a_pause_fails_the_suite() -> None:

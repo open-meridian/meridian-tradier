@@ -16,5 +16,14 @@ when more than one person can read a plugin entitled to a one-person
 dataset. Open Meridian does not decide whether your use meets Tradier's
 terms; the licence records what you entered.
 
+## The account and its orders
+
+Trading and holding an account at Tradier is under your own agreement with
+Tradier; which broker a person may trade with is between that person and the
+broker. Start on a paper or sandbox account. Wherever the plugin is listed,
+the listing is not an endorsement of it or of Tradier.
+
+## Agents
+
 An agent connected to your deployment may pass what it reads to its model's
 host; whether that is allowed is for Tradier's terms to say.
