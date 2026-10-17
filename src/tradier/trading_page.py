@@ -20,26 +20,22 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
 from typing import Any
 
 import meridian
-from meridian.plugin.v1 import operations_pb2 as ops
-from meridian.roles import data
+from meridian.roles import connectivity, data
+from meridian.roles.connectivity import TradingAsked, TradingEnabled, TradingRead
 
 from .kinds import KINDS
 from .page import current, pages
-from .records import AccountTrading, TradingAsked, TradingEnabled, TradingRead
 from .settings import SAID
 
 TRADING = "/admin/connections"
 ENABLE_TRADING = f"{TRADING}/enable-trading"
+#: The SDK's template for connectivity's Trading page.
+TEMPLATE = "meridian/roles/connectivity/trading.html"
 RAW = "/raw"
 CHECK = "/check"
-
-
-def _shown(at: datetime | None) -> str:
-    return at.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z") if at else ""
 
 
 def environment() -> str:
@@ -57,30 +53,11 @@ def _reached() -> list[str]:
 def trading_read() -> TradingRead:
     state = current()
     config = state.config
-    trader = state.trader
-    mapped = trader.mapped() if trader is not None else frozenset()
-    shown = trader.shown if trader is not None else None
-    return TradingRead(
-        credentials=[data.Credential("Access token", config.token_set)],
-        environment=environment(),
-        accounts=[
-            AccountTrading(
-                venue_account_code=code,
-                trading=trader is not None and trader.trading_on(code),
-                order_types=[
-                    ops.OrderType.Name(t).removeprefix("ORDER_TYPE_").lower()
-                    for t, _ in (trader.offered(code) if trader is not None else ())
-                ],
-                mapped=code in mapped,
-            )
-            for code in _reached()
-        ],
-        working=shown.working if shown else 0,
-        held=shown.held if shown else 0,
-        unknown=shown.unknown if shown else 0,
-        last_poll=_shown(shown.last_poll) if shown else "",
-        updates=state.polled,
-        error=shown.error if shown else "",
+    return connectivity.trading_read(
+        state.trader,
+        [data.Credential("Access token", config.token_set)],
+        environment(),
+        state.polled,
     )
 
 
@@ -107,7 +84,11 @@ def _may_enable(request: meridian.Request) -> bool:
 )
 async def trading(request: meridian.Request) -> meridian.Response:
     return pages.answer(
-        "trading.html", trading_read(), may_enable=_may_enable(request), enable=ENABLE_TRADING
+        TEMPLATE,
+        trading_read(),
+        may_enable=_may_enable(request),
+        enable=ENABLE_TRADING,
+        venue="Tradier",
     )
 
 
@@ -153,12 +134,13 @@ async def enable_trading(request: meridian.Request) -> meridian.Response:
         )
     said = f"Trading enabled on {code} ({environment()})."
     if request.tool_name:
-        return pages.answer("trading.html", TradingEnabled(code, said))
+        return pages.answer(TEMPLATE, TradingEnabled(code, said))
     return pages.answer(
-        "trading.html",
+        TEMPLATE,
         trading_read(),
         may_enable=_may_enable(request),
         enable=ENABLE_TRADING,
+        venue="Tradier",
         notice=said,
     )
 
@@ -186,7 +168,7 @@ async def check_enable_trading(request: meridian.Request) -> meridian.Response:
         if already
         else f"Would enable trading on {code} ({environment()})."
     )
-    return pages.answer("trading.html", TradingEnabled(code, said))
+    return pages.answer(TEMPLATE, TradingEnabled(code, said))
 
 
 def _may_read_mapped(request: meridian.Request) -> bool:

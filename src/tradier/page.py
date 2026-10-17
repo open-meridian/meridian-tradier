@@ -27,6 +27,7 @@ from typing import Any
 import meridian
 from meridian.plugin.v1 import operations_pb2 as ops
 from meridian.roles import data
+from meridian.roles.connectivity import Trader
 
 from .convert import NEW_YORK
 from .custody import Syncer
@@ -37,7 +38,6 @@ from .records import ConnectionRead, DatasetsRead, FeedRead, Served, SessionRead
 from .settings import SANDBOX, SANDBOX_SAID, Config
 from .source import TradierSource
 from .stream import Streamer
-from .trading import Trader
 from .vendor import LIMIT_PER_MINUTE, NS, Tradier, Usage
 
 TITLE = "Tradier"

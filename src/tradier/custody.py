@@ -78,16 +78,21 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import ROUND_HALF_EVEN, Decimal, InvalidOperation
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import meridian
 from meridian.edge import as_reported, derived, supplied_currency
 from meridian.plugin.v1 import operations_pb2 as ops
+from meridian.roles.connectivity import moment
 
 from .broker import Broker, BrokerError, NoKey, Unanswered
-from .trading import MARKET_ZONE, moment
 from .venue import listed
 
 log = logging.getLogger("tradier.custody")
+
+#: The listing market's zone: the day a statement's as-of date, and a fill's
+#: trade date, is in. US equities only (the SDK's Trader is told it).
+MARKET_ZONE = ZoneInfo("America/New_York")
 
 SOURCE = "tradier"
 ACTIVITY_SCHEME = "tradier:history-type"

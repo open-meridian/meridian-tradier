@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.10.0 (unreleased)
+
+On open-meridian 0.30.0, contract 25 unchanged: the connectivity role's work
+is the SDK's (sdk-contract/the-sdk-carries-each-roles-common-logic, ruled
+2026-10-13; ruling 206).
+
+- **Trading on the SDK's Trader** (`meridian.roles.connectivity`): the
+  plugin's `trading.py` (about 1,800 lines, kept nearly line for line with
+  Alpaca's) is gone. Placements heard and sent once, outcomes, fills
+  into the book, busts, cancels and replaces, pauses and stops, the catalogue
+  and venue-originated fills are the SDK's `Trader`, handed this plugin's
+  adapter (`venue.py`) and the listing market's zone (`custody.MARKET_ZONE`,
+  America/New_York). Tradier's client (`broker.py`) and its conversion stay
+  the plugin's, as transport.
+- **The Trading page** answers the SDK's `trading_read`, drawn by
+  `meridian/roles/connectivity/trading.html`; its records and
+  `templates/trading.html` are gone. Its tools and rows are as they were;
+  the token's row and its next step say the role's words, "Key" and "No
+  key yet: Enter it in Settings".
+- **Its tests** run the plugin's adapter over the simulated brokerage on the
+  SDK's rig (`meridian.roles.connectivity.testing.Rig`); simulated only,
+  nothing reaches Tradier.
+
 ## 0.9.0 (unreleased)
 
 On open-meridian 0.29.0, contract 25 (sdk-contract/plugins-are-shared-and-

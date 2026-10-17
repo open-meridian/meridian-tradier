@@ -1,4 +1,4 @@
-"""Tradier as the Trader's venue (trading.py): its words to the contract's and
+"""Tradier as the Trader's venue (meridian.roles.connectivity): its words to the contract's and
 back, over its brokerage API (broker.py). The one place Tradier's order
 vocabulary is read.
 
@@ -29,11 +29,18 @@ from decimal import Decimal
 from typing import Any
 
 from meridian.plugin.v1 import operations_pb2 as ops
+from meridian.roles import connectivity
+from meridian.roles.connectivity import (
+    Asked,
+    Catalogue,
+    Change,
+    VenueOrder,
+    VenueRefused,
+    VenueUnanswered,
+)
 
-from . import trading
 from .broker import Broker, BrokerError, Unanswered
 from .kinds import TRADING
-from .trading import Asked, Catalogue, Change, VenueOrder, VenueRefused, VenueUnanswered
 
 SOURCE = "tradier"
 #: How long the token's accounts are held before they are read again.
@@ -41,13 +48,13 @@ ACCOUNTS_READ_AGAIN = timedelta(minutes=10)
 
 STATUSES: dict[str, str] = {
     **{
-        status: trading.WORKING
+        status: connectivity.WORKING
         for status in ("pending", "open", "partially_filled", "pending_cancel")
     },
-    "filled": trading.FILLED,
-    "canceled": trading.CANCELLED,
-    "expired": trading.EXPIRED,
-    "rejected": trading.REJECTED,
+    "filled": connectivity.FILLED,
+    "canceled": connectivity.CANCELLED,
+    "expired": connectivity.EXPIRED,
+    "rejected": connectivity.REJECTED,
 }
 SIDES: dict[int, str] = {
     ops.SIDE_BUY: "buy",
@@ -100,20 +107,20 @@ def listed(value: Any, outer: str, inner: str) -> list[Any]:
 def order_of(said: Any) -> VenueOrder:
     """One of Tradier's orders, as the Trader reads it."""
     held = said if isinstance(said, dict) else {}
-    last_quantity = trading.number(held.get("last_fill_quantity"))
-    last_price = trading.number(held.get("last_fill_price"))
+    last_quantity = connectivity.number(held.get("last_fill_quantity"))
+    last_price = connectivity.number(held.get("last_fill_price"))
     return VenueOrder(
         order_id=str(held.get("id") or ""),
         client_order_id=str(held.get("tag") or ""),
         status=str(held.get("status") or ""),
         symbol=str(held.get("symbol") or ""),
         side=str(held.get("side") or ""),
-        quantity=trading.number(held.get("quantity")),
-        filled=trading.number(held.get("exec_quantity")) or Decimal(0),
-        average=trading.number(held.get("avg_fill_price")) or None,
-        limit=trading.number(held.get("price")),
-        placed_at=trading.moment(held.get("create_date")),
-        updated_at=trading.moment(held.get("transaction_date")),
+        quantity=connectivity.number(held.get("quantity")),
+        filled=connectivity.number(held.get("exec_quantity")) or Decimal(0),
+        average=connectivity.number(held.get("avg_fill_price")) or None,
+        limit=connectivity.number(held.get("price")),
+        placed_at=connectivity.moment(held.get("create_date")),
+        updated_at=connectivity.moment(held.get("transaction_date")),
         last_fill=(
             (last_quantity, last_price)
             if last_quantity is not None and last_price is not None and last_quantity > 0
