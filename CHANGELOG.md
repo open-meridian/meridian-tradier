@@ -22,6 +22,11 @@ is the SDK's (sdk-contract/the-sdk-carries-each-roles-common-logic, ruled
 - **Its tests** run the plugin's adapter over the simulated brokerage on the
   SDK's rig (`meridian.roles.connectivity.testing.Rig`); simulated only,
   nothing reaches Tradier.
+- **The pins**: open-meridian 0.30.0, as released on PyPI, and
+  plugin-python:0.30.0 by tag and digest
+  (`sha256:a238c6d9...3473ed6`) in the Dockerfile, which `make image` now
+  builds on as an upload does; core v25's runtime and harness (abf028f) and
+  `meridian` 0.1.46 as before.
 
 ## 0.9.0 (unreleased)
 
