@@ -25,7 +25,7 @@ the moment its answer arrived, before anything reads it: a read under
 `responses`, a page of history under `activity`, a send under `trading`. A
 send that never got an answer is kept too, saying so, and raises
 `Unanswered`: it may have reached Tradier, and is never sent again on its
-own (trading.py). Tradier's numbers are JSON numbers; a body is parsed with
+own (the SDK's Trader). Tradier's numbers are JSON numbers; a body is parsed with
 every number a Decimal from its own text.
 
 **Rate limits.** Tradier allows a token 120 brokerage calls a minute; this

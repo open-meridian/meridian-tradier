@@ -3,8 +3,8 @@ plugin's own trading code and the simulated brokerage.
 
 Each case is mapped to what Tradier's brokerage API answers for it, through the
 simulated brokerage (synthetic_broker.py: a symbol for each answer, a
-quantity that works or fills), and run through this plugin's own Trader
-(trading.py) over its own adapter (venue.py) and client (broker.py),
+quantity that works or fills), and run through the SDK's Trader
+(meridian.roles.connectivity) over its own adapter (venue.py) and client (broker.py),
 against the runner's recorder; only the sidecar is stood in for. SIMULATED
 ONLY: nothing reaches Tradier.
 

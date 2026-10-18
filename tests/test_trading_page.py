@@ -8,12 +8,12 @@ import asyncio
 from pathlib import Path
 
 from meridian.plugin.v1 import operations_pb2 as ops
+from meridian.roles.connectivity import Sent
 from meridian.suites import Recorder
 from meridian.testing import PageClient
 
 from tradier.page import State, pages, use
 from tradier.settings import SANDBOX, Config, Credentials
-from tradier.trading import Noted
 from tradier.trading_page import ENABLE_TRADING, RAW, TRADING
 from trading_cases import CODE, Rig, placement, scope
 
@@ -58,7 +58,7 @@ def test_paper_is_said_plainly(tmp_path: Path) -> None:
 def test_enable_trading_enables_the_account_and_publishes_its_catalogue(tmp_path: Path) -> None:
     recorder = Recorder("tradier")
     rig = Rig(recorder, enabled=False)
-    rig.enabled = Noted(tmp_path / "enabled.json")
+    rig.enabled = Sent(tmp_path / "enabled.json")
     rig.trader = rig.make()
     client = client_for(state_with(rig, Config(sample_data=True)))
     checked = client.call_tool("check_enable_trading", {"venue_account_code": CODE})

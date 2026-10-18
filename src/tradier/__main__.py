@@ -25,7 +25,8 @@ its instance and places it at Tradier in the environment chosen (live, or
 the developer sandbox's paper trading), reads the account's orders on a
 poll, Tradier streaming none on its sandbox, and honours the firm's pauses
 and stops, and from 0.7.0 reports the fills of orders placed in Tradier's
-own web app on no placement (trading.py). From 0.7.0, where launched with
+own web app on no placement (the SDK's
+`meridian.roles.connectivity.Trader`). From 0.7.0, where launched with
 `custody`, it is the custodian of each account the token reaches too: it
 reads them every Read every, reporting their positions, cash and history
 (custody.py). Sample data trades with, and reads, a simulated brokerage
@@ -51,10 +52,11 @@ from typing import Any
 
 import meridian
 from meridian import edge
+from meridian.roles.connectivity import Sent, Trader, Watched, trading_files
 
 from .broker import Broker
 from .convert import spelled
-from .custody import Syncer
+from .custody import MARKET_ZONE, Syncer
 from .declaration import DECLARATION, PORT
 from .kinds import Store, tend, windows_from
 from .kinds import root as kinds_root
@@ -66,7 +68,6 @@ from .source import TradierSource
 from .stream import Feed, FeedError, Refused, Streamer, TradierFeed
 from .synthetic import SyntheticFeed, SyntheticTransport, exchange
 from .synthetic_broker import SyntheticBroker
-from .trading import Noted, Trader, Watched, trading_files
 from .vendor import API, SANDBOX, NoKey, Tradier, Transport, VendorError, urllib_transport
 from .venue import TradierVenue
 
@@ -356,11 +357,12 @@ async def run() -> None:
                 plugin,
                 lambda: account.venue,
                 now=lambda: datetime.now(UTC),
-                sent=Noted(sent),
-                enabled=Noted(enabled),
+                sent=Sent(sent),
+                enabled=Sent(enabled),
                 # The venue account codes its ems mapped on it (W11.22).
                 scope=lambda: state.scope,
                 watched=Watched(originated),
+                market_zone=MARKET_ZONE,
             )
         configured = asyncio.Event()
         page = serve(plugin, state, port)

@@ -7,7 +7,8 @@
 # an upload sends only that. Move the two together when moving to a new SDK.
 #
 # BASE is for building against a base made locally rather than a released one.
-ARG BASE=ghcr.io/open-meridian/plugin-python:0.29.0
+# The release by its tag and its digest, the image exactly; move both together.
+ARG BASE=ghcr.io/open-meridian/plugin-python:0.30.0@sha256:a238c6d9292779b4f1df0a06cd30836367c01412a703b559a7414137f3473ed6
 FROM ${BASE}
 WORKDIR /plugin
 # Installed from a mount rather than copied, so the image holds the installed
