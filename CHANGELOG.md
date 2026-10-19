@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.11.1
+
+- **Custody's pages on the SDK** (ruling 213): Account links, Statements and
+  History are `meridian.roles.custody.account_pages(...)`, declared by the
+  SDK; `custody_pages.py` keeps only what Tradier's sync holds (its
+  `Source`: the accounts the credential reaches, each one's statement and
+  activities, its custodian and account type). Their paths, tools, records
+  and words are as they were; the tools' descriptions are the SDK's. The
+  plugin's own `LinkAsked` and its unchanged Statements and History
+  templates are gone (the role's own are drawn); Account links keeps its
+  template, for its notice and its plain form per account.
+- **The pins**: `meridian` 0.1.50, which reads the pages the SDK declares in
+  `role-pages`; open-meridian 0.31.1 and plugin-python:0.31.1 by digest
+  (`sha256:67781f14...a3535b39`): a saved value no longer a choice arrives
+  unset in `Settings.refused`, never raised.
+
 ## 0.11.0
 
 On open-meridian 0.31.0, contract 26.

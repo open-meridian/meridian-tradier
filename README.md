@@ -22,7 +22,7 @@ It is the second half of the retail pair, beside
 [meridian-alpaca](https://github.com/open-meridian/plugin-alpaca): both
 pass the same suites of the SDK, unchanged.
 
-**Status:** 0.11.0, on open-meridian 0.31.0 (contract 26): its connectivity
+**Status:** 0.11.1, on open-meridian 0.31.1 (contract 26): its connectivity
 work the SDK's (`meridian.roles.connectivity`), and from 0.11.0 its listings
 in the lake too (`meridian.roles.data.listings`); the environment its
 session reached on its venue catalogue, the agents' demo-only guard's second
