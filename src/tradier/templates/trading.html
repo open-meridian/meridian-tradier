@@ -1,0 +1,10 @@
+{#- Trading, at admin: connectivity's page, with the connection's badge
+    (contract v26, the agents' demo-only guard): Demo where the Environment
+    setting says Sandbox and the session reached Tradier's sandbox host, Live where
+    neither does, and "Live (environment not confirmed)" where the two
+    disagree. Agents may place orders only on a Demo connection. -#}
+{% extends "meridian/roles/connectivity/trading.html" %}
+{% import "meridian/kit.html" as kit %}
+{% block vendor_notices %}
+{% if data.badge %}<p class="hint">Connection {% if data.badge == "Demo" %}{{ kit.badge("Demo", "good") }}{% elif data.badge == "Live" %}{{ kit.badge("Live", "warn") }}{% else %}{{ kit.badge(data.badge, "bad") }}{% endif %} The session reached Tradier's {{ data.reached_environment }} host; agents may place orders only on a Demo connection.</p>{% endif %}
+{% endblock %}

@@ -19,6 +19,15 @@ nothing sent.
 **Its statuses** (Tradier's "Get orders"): working while `pending`, `open`,
 `partially_filled` or `pending_cancel`; `filled`; `canceled`; `expired`;
 `rejected`. Any other is outcome unknown, the status as reported.
+
+**The environment its session reached** (contract v26, G1 question 5):
+`environment` is read from the host the brokerage API is called at,
+`sandbox.tradier.com` `sandbox` and `api.tradier.com` `live`
+(`meridian.reached_environment`), and the SDK's Trader publishes it on the
+venue catalogue: the second key of the agents' demo-only guard, which
+counts a connection demo only while the setting and this both say
+`sandbox`. The simulated brokerage reaches no venue, so it reports
+`sandbox`.
 """
 
 from __future__ import annotations
@@ -28,6 +37,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
+import meridian
 from meridian.plugin.v1 import operations_pb2 as ops
 from meridian.roles import connectivity
 from meridian.roles.connectivity import (
@@ -43,6 +53,11 @@ from .broker import Broker, BrokerError, Unanswered
 from .kinds import TRADING
 
 SOURCE = "tradier"
+#: Tradier's brokerage API hosts, by the environment each is (contract v26).
+LIVE_HOSTS = ("api.tradier.com",)
+SANDBOX_HOSTS = ("sandbox.tradier.com",)
+#: What the simulated brokerage reports: it reaches no venue.
+SANDBOX = "sandbox"
 #: How long the token's accounts are held before they are read again.
 ACCOUNTS_READ_AGAIN = timedelta(minutes=10)
 
@@ -140,6 +155,12 @@ class TradierVenue:
 
     def __init__(self, broker: Broker) -> None:
         self.broker = broker
+        #: The environment the session reached (above).
+        self.environment = (
+            SANDBOX
+            if broker.synthetic
+            else meridian.reached_environment(broker.base, live=LIVE_HOSTS, sandbox=SANDBOX_HOSTS)
+        )
         self._accounts: tuple[str, ...] = ()
         self._read_at: datetime | None = None
 

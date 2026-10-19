@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.11.0
+
+On open-meridian 0.31.0, contract 26.
+
+- **Environment** is declared with the SDK's `meridian.environment()`: its
+  name, label, values (`live`, `sandbox`) and default (Sandbox) as before,
+  so a saved value carries over. Its description says agents may place
+  orders only on Sandbox.
+- **The listings in the lake on the SDK** (ruling 213): `lake.py`, about 980
+  lines kept nearly line for line with Alpaca's, is now a subclass of
+  open-meridian 0.31.0's `meridian.roles.data.listings.Feed` keeping only
+  what is Tradier's: its source's name, how far its history reaches, its
+  time and sales prints' attributes and sequence numbers. Wants, standing
+  wants, recording, the restart watermark and the counts are the SDK's; what
+  is recorded is unchanged, and the data suite passes as before.
+- **The custody slice waits for meridian 0.1.50.** The Account links,
+  Statements and History pages stay in `custody_pages.py`: the SDK's
+  `custody.account_pages` declares them inside the SDK, which meridian
+  0.1.49's `role-pages` rule does not recognise yet, so `plugin check
+  --verified` would fail. They move once 0.1.50 recognises it.
+- **The session's reported environment** (contract v26, the agents'
+  demo-only guard, spec/the-contract-gaps-v26-and-v27-close G1): the venue
+  adapter reads the environment its session reached from the host it calls,
+  `sandbox.tradier.com` `sandbox` and `api.tradier.com` `live`
+  (`meridian.reached_environment`), and the SDK's Trader publishes it on the
+  venue catalogue. The simulated brokerage reports `sandbox`. **Trading**
+  shows the connection's badge, Demo, Live or Live (environment not
+  confirmed) (`meridian.connection_badge`), and `read_trading` answers
+  `reached_environment` and `badge` beside the role's fields.
+- **The data suite's v26 cases.** `queries-the-lake-within-bounds` passes on
+  the SDK's producer (`lake_query`); `reports-an-event-group` and
+  `reports-a-flag-the-venue-does-not-state` are not presented, with why
+  (Tradier's stock data lists no event contract). The event group heard and
+  read is the SDK's.
+- **The pins**: open-meridian 0.31.0, as released on PyPI, and
+  plugin-python:0.31.0 by tag and digest (`sha256:e041f83c...24cf5d2`); core
+  v26's runtime and harness (17a13a2, merged as 648e25f, chart 0.1.308), by
+  tag and digest; `meridian` 0.1.49, the first CLI holding contract v26's
+  suites.
+- **Tests**: the catalogue's environment, the environment read from each
+  host, the badge on Trading and in its tool, and the data suite's new
+  cases, on the simulated brokerage and recorded exchanges; nothing reaches
+  Tradier.
+
 ## 0.10.0 (2026-10-19)
 
 On open-meridian 0.30.0, contract 25 unchanged: the connectivity role's work

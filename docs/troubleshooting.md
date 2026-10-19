@@ -34,4 +34,5 @@
 | An order type or time in force rejected | Tradier's catalogue does not offer it | Choose one the catalogue lists on Trading |
 | A fill waits | It is sent only with its settlement date, from the deployment's date read | Nothing: it is asked about again on each read |
 | A fill on no order | An order placed in Tradier's own web app filled | The desk accepts it to an order or answers it DK |
+| An agent's order refused as live | The connection is not Demo: Environment is Live, or the session reached Tradier's live host | Agents trade only on Sandbox; a person places live orders |
 | Orders **held** | A pause or a stop is in force | Lift it; a stop also cancelled what was working |

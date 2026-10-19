@@ -13,7 +13,7 @@ In your Tradier Brokerage account, open the API settings page and copy your acce
 
 **Manage → Settings.**
 
-1. **Environment**, first: **Live** is Tradier's API with your brokerage account's token; **Sandbox** is Tradier's developer sandbox, for testing, delayed 15 minutes and not streaming, trading a paper account with simulated money. It is Sandbox until a person chooses Live.
+1. **Environment**, first: **Live** is Tradier's API with your brokerage account's token; **Sandbox** is Tradier's developer sandbox, for testing, delayed 15 minutes and not streaming, trading a paper account with simulated money. It is Sandbox until a person chooses Live. Agents may place orders only on Sandbox.
 2. The **Access token** for the environment chosen: the brokerage account's API access token on Live, a developer sandbox token on Sandbox. Secret settings: once saved
    they are never shown again, logged, put on a page or sent anywhere but
    Tradier.
