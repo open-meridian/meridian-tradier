@@ -111,7 +111,9 @@ def test_the_environment_is_declared_first_and_one_token_serves_either() -> None
     assert first.name == ENVIRONMENT and first.required and first.default == "sandbox"
     assert [c.value for c in first.choices] == ["live", "sandbox"] and first.label == "Environment"
     assert [c.label for c in first.choices] == ["Live", "Sandbox"]
-    assert first.description.endswith("Sandbox until a person chooses Live.")
+    assert "Sandbox until a person chooses Live." in first.description
+    # The agents' demo-only guard (contract v26), said where the choice is made.
+    assert first.description.endswith("Agents may place orders only on Sandbox.")
     # 0.2.1's switch, declared again so a saved value reaches the plugin.
     assert old.name == OLD_SANDBOX and old.kind is bool and old.developer
     assert old.default is None and not old.required and old.roles == first.roles

@@ -10,7 +10,10 @@
   role's admin (`enable_trading`, checked by `check_enable_trading`, at
   `/admin/connections/enable-trading` as SnapTrade's): a new account is
   read-only until then. Counts and codes only: an admin page shows no
-  account's data.
+  account's data. From contract v26 it carries the agents' demo-only
+  guard's second key beside the setting: the environment the session
+  reached, read from Tradier's host (venue.py), and the badge the two make
+  (`meridian.connection_badge`).
 - Raw records (`/raw`, Open and View; custody and connectivity): each kind
   kept, its window and what becomes of it past it, and a raw record followed
   from a fact's or a row's reference, shown to a person who may read an
@@ -20,20 +23,22 @@
 from __future__ import annotations
 
 import json
+from dataclasses import fields
 from typing import Any
 
 import meridian
 from meridian.roles import connectivity, data
-from meridian.roles.connectivity import TradingAsked, TradingEnabled, TradingRead
+from meridian.roles.connectivity import TradingAsked, TradingEnabled
 
 from .kinds import KINDS
 from .page import current, pages
+from .records import TradingRead
 from .settings import SAID
 
 TRADING = "/admin/connections"
 ENABLE_TRADING = f"{TRADING}/enable-trading"
-#: The SDK's template for connectivity's Trading page.
-TEMPLATE = "meridian/roles/connectivity/trading.html"
+#: Connectivity's Trading page: the SDK's, with the connection's badge.
+TEMPLATE = "trading.html"
 RAW = "/raw"
 CHECK = "/check"
 
@@ -50,14 +55,27 @@ def _reached() -> list[str]:
     return list(trader.reached) if trader is not None else []
 
 
+def session_environment() -> str:
+    """The environment the session reached (venue.py): `live`, `sandbox`, or
+    empty while there is no client to reach Tradier with."""
+    venue = current().venue
+    return str(getattr(venue, "environment", "") or "") if venue is not None else ""
+
+
 def trading_read() -> TradingRead:
     state = current()
     config = state.config
-    return connectivity.trading_read(
+    reached = session_environment()
+    held = connectivity.trading_read(
         state.trader,
         [data.Credential("Access token", config.token_set)],
         environment(),
         state.polled,
+    )
+    return TradingRead(
+        **{each.name: getattr(held, each.name) for each in fields(held)},
+        reached_environment=reached,
+        badge=meridian.connection_badge(config.environment_setting, reached) if reached else "",
     )
 
 
@@ -79,7 +97,8 @@ def _may_enable(request: meridian.Request) -> bool:
         "reaches by its venue account code, read-only or with trading enabled, the order "
         "types its catalogue offers and whether its ems mapped it here; how many placements "
         "are working, held back by a pause or a stop, or of unknown outcome; the last read "
-        "of the orders, which Tradier is polled for. No account's data."
+        "of the orders, which Tradier is polled for; the environment the session reached "
+        "and the connection's badge, Demo or Live. No account's data."
     ),
 )
 async def trading(request: meridian.Request) -> meridian.Response:

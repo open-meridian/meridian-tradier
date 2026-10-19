@@ -13,7 +13,7 @@ from meridian.suites import Recorder
 from meridian.testing import PageClient
 
 from tradier.page import State, pages, use
-from tradier.settings import SANDBOX, Config, Credentials
+from tradier.settings import LIVE, SANDBOX, Config, Credentials
 from tradier.trading_page import ENABLE_TRADING, RAW, TRADING
 from trading_cases import CODE, Rig, placement, scope
 
@@ -23,7 +23,9 @@ KEY = Credentials("trading-page-token-0000000000000009")
 
 def state_with(rig: Rig, config: Config) -> State:
     asyncio.run(rig.trader.start())
-    return State(config=config, trader=rig.trader, store=rig.store, scope=rig.scope)
+    return State(
+        config=config, trader=rig.trader, store=rig.store, scope=rig.scope, venue=rig.venue
+    )
 
 
 def client_for(state: State, **given: object) -> PageClient:
@@ -109,3 +111,28 @@ def test_raw_records_follows_a_facts_reference_for_a_reader_of_the_account(
     assert "placing an order" in page and "Trading" in page
     stranger = client_for(state)
     assert "placing an order" not in stranger.get(RAW, "read", ref=sent.raw_record.key).text
+
+
+def test_the_connections_badge_is_both_keys(tmp_path: Path) -> None:
+    """Contract v26 (W11.8): Demo where the setting and the session both say
+    sandbox, and "Live (environment not confirmed)" where they disagree -- here
+    a setting of Live over the simulated brokerage, which reports sandbox. The
+    tool reads the same."""
+    rig = Rig(Recorder("tradier"))
+    client = client_for(state_with(rig, Config(sample_data=True)))
+    page = client.get(TRADING, "admin").text
+    assert "Demo" in page and "Tradier's sandbox host" in page
+    data = client.call_tool("read_trading").data
+    assert data["reached_environment"] == "sandbox" and data["badge"] == "Demo"
+    mismatch = Config(credentials=KEY, token_set=True, environment=LIVE, environment_setting=LIVE)
+    client = client_for(state_with(Rig(Recorder("tradier")), mismatch))
+    assert client.call_tool("read_trading").data["badge"] == "Live (environment not confirmed)"
+    assert "Live (environment not confirmed)" in client.get(TRADING, "admin").text
+
+
+def test_no_badge_before_there_is_a_client(tmp_path: Path) -> None:
+    rig = Rig(Recorder("tradier"))
+    state = state_with(rig, Config())
+    state.venue = None
+    data = client_for(state).call_tool("read_trading").data
+    assert data["reached_environment"] == "" and data["badge"] == ""

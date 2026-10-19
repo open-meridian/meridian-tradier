@@ -71,6 +71,9 @@ class State:
     #: kind's window).
     syncer: Syncer | None = None
     trader: Trader | None = None
+    #: Connectivity's venue as the settings stand, for the environment its
+    #: session reached (contract v26).
+    venue: Any = None
     updates: Any = None
     store: Store | None = None
     scope: meridian.AccountScope = field(default_factory=meridian.AccountScope)

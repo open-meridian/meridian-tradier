@@ -224,6 +224,7 @@ async def watch_settings(
         if account is not None:
             if account.use(state.config) and woken is not None:
                 woken.set()
+            state.venue = account.venue
             seconds = SYNTHETIC_POLL_SECONDS if state.config.sample_data else POLL_SECONDS
             state.polled = f"Polled every {seconds}s: Tradier streams no orders on its sandbox"
         state.tradier, state.source = source_for(state.config, store)

@@ -23,7 +23,11 @@ serves:
   developer sandbox's paper account, simulated money. From 0.7.1 it
   defaults to `sandbox`, not the common setting's `live`, so Live is only
   ever a person's choice (the product owner, 2026-10-14): an upgrade or an
-  unset value never turns the plugin Live.
+  unset value never turns the plugin Live. From 0.11.0 it is declared with
+  the SDK's `meridian.environment`, its name, label, values and default as
+  before, and it is one key of the agents' demo-only guard (contract v26):
+  a connection is demo while this says `sandbox` and the session reached
+  sandbox.tradier.com (venue.py).
 - the token, one required secret, `tradier_access_token`, for whichever
   environment is chosen, and for every role (the same token trades and
   reads the accounts): the
@@ -91,18 +95,14 @@ class Declared:
     """The settings as declared, in the data role's order: one typed class,
     the SDK's form, which `connect` and the declaration register."""
 
-    # The common setting `environment` (meridian.environment), its name,
-    # label and values, but Sandbox by default: Live is a person's choice.
-    environment: str = meridian.setting(
-        "Environment",
-        required=True,
-        default=SANDBOX,
-        choices=(meridian.Choice(LIVE, "Live"), meridian.Choice(SANDBOX, "Sandbox")),
+    # The common setting `environment` (meridian.environment), its demo
+    # `sandbox` in Tradier's word, and Sandbox until a person chooses Live.
+    environment: str = meridian.environment(
         description=(
             "Live: Tradier's API, with a Tradier Brokerage account's token, its orders real. "
             "Sandbox: Tradier's developer sandbox, for testing, its data delayed 15 minutes "
             "and not streamed, its orders paper trading with simulated money. Sandbox until "
-            "a person chooses Live."
+            "a person chooses Live. Agents may place orders only on Sandbox."
         ),
         roles=EVERY_ROLE,
     )
@@ -186,11 +186,13 @@ class Credentials:
 class Config:
     """The settings as the plugin uses them: the environment, the token, if
     given, whether it is set (never its value), custody's cadence, and
-    sample data."""
+    sample data; and the environment setting as delivered, the agents'
+    guard's first key."""
 
     credentials: Credentials | None = None
     token_set: bool = False
     environment: str = SANDBOX
+    environment_setting: str = SANDBOX
     sample_data: bool = False
     poll_seconds: int = DEFAULT_POLL_SECONDS
     stale_after: timedelta = timedelta(hours=DEFAULT_STALE_AFTER_HOURS)
@@ -249,6 +251,7 @@ def config_from(values: Mapping[str, object], unset: Collection[str] = ()) -> Co
         credentials=Credentials(token) if token else None,
         token_set=bool(token),
         environment=environment,
+        environment_setting=str(values.get(ENVIRONMENT) or ""),
         sample_data=values.get(SAMPLE_DATA) is True,
         poll_seconds=(
             max(poll, LEAST_POLL_SECONDS)

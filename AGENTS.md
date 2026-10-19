@@ -27,7 +27,10 @@ as for every plugin.
 - `src/tradier/convert.py`: Tradier's values to what is recorded, Decimals from
   their own text, never a float. `source.py` puts the client and the
   conversion together for `lake.py`.
-- `src/tradier/lake.py`: what the lake wants and what is recorded: wants
+- `src/tradier/lake.py`: from 0.11.0 the SDK's listings feed
+  (`meridian.roles.data.listings.Feed`), this module keeping only what is
+  Tradier's (its source's name, its history's reach, its conditions); what the
+  lake wants and what is recorded: wants
   answered or declined per subject, standing wants kept current, forming
   days restated under one row key, final closes pushed, subjects and venues
   resolved (W3.1, W3.2, W3.14, W3.15).
@@ -50,7 +53,8 @@ as for every plugin.
   commit a real response: they are the account holder's, for personal use.
 - `src/tradier/venue.py`: the connectivity role's adapter. From 0.10.0 the
   role's work is the SDK's (`meridian.roles.connectivity.Trader`,
-  open-meridian 0.30.0): placements heard, sent, changed and cancelled; facts
+  open-meridian 0.30.0; from contract v26 its session's environment on the
+  catalogue, read from the host in `venue.py`): placements heard, sent, changed and cancelled; facts
   reported; fills derived to one ID however often they are read; pauses and
   stops; enabling trading and the catalogue. `venue.py` is Tradier's words for
   it, `broker.py` the one module that speaks to its brokerage API (sandbox or
