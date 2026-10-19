@@ -67,7 +67,9 @@ as for every plugin.
   token reaches, its balances, positions, history and this session's
   orders, and the quotes naming a holding's kind, read and reported
   (`Syncer`), every value closed rather than read carrying its provenance;
-  `custody_pages.py` the Account links, Statements and History pages.
+  `custody_pages.py` the Account links, Statements and History pages: from
+  0.11.1 the SDK's (`meridian.roles.custody.account_pages`), the module
+  keeping only what Tradier's sync holds (a `Source`).
 - `src/tradier/synthetic_broker.py`: a simulated brokerage behind the
   brokerage API's shapes, a symbol for each answer (`SYNREJ`, `SYNLOST`,
   `SYNODD`, `SYNBUST`, `SYNREN`), the account's balances, positions and
