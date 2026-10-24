@@ -52,6 +52,7 @@ from typing import Any
 
 import meridian
 from meridian import edge
+from meridian.roles import Latency
 from meridian.roles.connectivity import Sent, Trader, Watched, trading_files
 
 from .broker import Broker
@@ -338,7 +339,9 @@ async def run() -> None:
             ", ".join(sorted(roles)) or "none",
         )
         lake = Lake(plugin, None, Products(granted / "products.json" if granted else None))
-        state = State(lake=lake, store=kinds)
+        # The sessions' latency (contract v27): recorded for Connection's
+        # Sessions, not yet reported (core receives ReportLatency from v28).
+        state = State(lake=lake, store=kinds, latency=Latency(plugin))
         streamer = Streamer(lambda: feed_for(state, store), lake.heard, lake.flush)
         lake.streamer = state.streamer = streamer
         account = Account(kinds, granted)
@@ -364,6 +367,9 @@ async def run() -> None:
                 scope=lambda: state.scope,
                 watched=Watched(originated),
                 market_zone=MARKET_ZONE,
+                # Each call to the brokerage API its round trip, a placement
+                # its acknowledgement, a fill its delay (contract v27).
+                latency=state.latency,
             )
         configured = asyncio.Event()
         page = serve(plugin, state, port)

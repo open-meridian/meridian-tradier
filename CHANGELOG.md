@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.12.0
+
+On open-meridian 0.32.2, contract 27.
+
+- **One Connection for market data and orders** (ruling 457): Connection is
+  the SDK's `connectivity.connection_pages`, connectivity's sections
+  (Environment, Accounts, Placements, and Sessions once measured) drawn
+  after the data role's; "Enable trading" is made on it (`/enable-trading`).
+  `read_connection` answers them as `trading`. **The Trading page and
+  `read_trading` are gone**; `enable_trading` and `check_enable_trading`
+  keep their names. The page fits one screen once open-meridian 0.32.3's
+  tab row is in (the SDK's, never a template of the plugin's own).
+- **No copied code between plugins** (rulings 202 and 457): `trading_page.py`
+  and the plugin's own `trading.html`, `account_links.html` and
+  `raw_records.html` are deleted. Raw records is the SDK's
+  `raw_records_page`, and Account links the role's own template. The
+  plugin's `TradingRead` is gone: the SDK's carries the badge.
+- **Placement types** (contract v27, W11.20): the adapter declares DMA alone
+  (`placement_types`); Tradier takes no request for quote, so an RFQ
+  placement is rejected `unsupported` with nothing sent, and the catalogue
+  lists DMA.
+- **The trader's fixes from SDK 0.32.0:** a rejected replace's raw record
+  names the venue account (tested); an order placed in Tradier's own app is
+  resolved by every identifier Tradier states -- its symbol, and no
+  currency, which Tradier never states -- its fills priced in its
+  instrument's currency (tested). Tradier's durations take no expiry, so a
+  good-till-date order stays `unsupported` (tested).
+- **Latency:** the Trader records the brokerage API session's round trip,
+  order acknowledgement and fill delay (`roles.Latency`), shown under
+  Sessions; not reported until contract v28 (ruling 515). The suites' two
+  `latency` cases are not presented, "core receives ReportLatency from
+  contract v28, ruling 515" (ruling 518). No dataset declares a delay: the
+  catalogue is one for both environments, and Live is real time. The
+  stream's liveness (`records-a-datasets-liveness`) follows on
+  open-meridian 0.32.3, whose listings feed records it.
+- **The suites' v27 cases:** the seven rates cases (Tradier publishes no
+  rates) and an RFQ dealer's quote (it takes no RFQ), not presented with why.
+- **Datasets** fits 1280x800: its line on the terms shortened.
+- **The pins**: open-meridian 0.32.2 and plugin-python:0.32.2 by digest;
+  the core runtime and harness a5da59a by digest (chart 0.1.310); `meridian`
+  0.1.52. The licence's new attribution fields are not set: core v27 refuses
+  a catalogue carrying them.
+
 ## 0.11.1
 
 - **Custody's pages on the SDK** (ruling 213): Account links, Statements and

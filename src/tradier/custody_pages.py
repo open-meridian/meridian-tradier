@@ -73,16 +73,5 @@ class Source:
         return current().scope.links
 
 
-# Account links in the plugin's own template (a notice once linked, and a
-# plain form per account for a browser without the kit); Statements and
-# History in the role's.
-custody.account_pages(
-    pages,
-    Source,
-    what=WHAT,
-    templates=(
-        "account_links.html",
-        "meridian/roles/custody/statements.html",
-        "meridian/roles/custody/history.html",
-    ),
-)
+# Account links, Statements and History in the role's templates.
+custody.account_pages(pages, Source, what=WHAT)

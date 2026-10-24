@@ -22,6 +22,27 @@ under the same names on every data plugin.
   when, its reconnects (each a gap Tradier's history cannot fill) and
   messages.
 
+## Connection's trading sections
+
+One page for market data and for orders: for an admin of the connectivity
+role, Connection goes on with orders' sections, which `read_connection`
+answers under `trading`. **Environment**: Paper or Live, said plainly.
+**Accounts**: each account the access token reaches by its venue account
+code, read-only or with trading enabled; **Enable trading** on a read-only
+account, for that admin alone (`enable_trading`). The order types its
+catalogue offers, and whether the execution plugin mapped it, are in the
+tool's answer. **Placements**: how many orders are working, held back by a
+pause or a stop, or of unknown outcome, and when the orders were last read.
+**Sessions**, once measured: each call to the brokerage API's round trip,
+an order's acknowledgement and a fill's delay. No account's data.
+
+The **Connection** badge, above the sections, says whether agents may
+place orders on it: **Demo** where Environment says Sandbox and the session
+reached Tradier's sandbox host (`sandbox.tradier.com`), **Live** where
+neither does, and **Live (environment not confirmed)** where the two
+disagree. The deployment refuses an agent's order on any connection that is
+not Demo.
+
 ## Datasets (`read_datasets`)
 
 - **Served:** each dataset as its catalogue declares it: what it serves, how
@@ -50,22 +71,6 @@ Under Open and View, for people who may read the linked account
 (`read_statements`, `read_account_activities`). **Statements**: its
 custodian, the day its last statement is as of, and its state at Tradier.
 **History**: its activity as Tradier reported it, the latest first.
-
-## Trading
-
-Under Manage, for an admin of the connectivity role (`read_trading`). The
-environment, Paper or Live, said plainly; each account the access token
-reaches by its venue account code, read-only or with trading enabled, the
-order types its catalogue offers and whether the execution plugin mapped
-it; how many orders are working, held back by a pause or a stop, or of
-unknown outcome. **Enable trading** on a read-only account. No account's
-data.
-
-The **Connection** badge says whether agents may place orders on it: **Demo**
-where Environment says Sandbox and the session reached Tradier's sandbox host
-(`sandbox.tradier.com`), **Live** where neither does, and **Live (environment not
-confirmed)** where the two disagree. The deployment refuses an agent's
-order on any connection that is not Demo.
 
 ## Raw records
 

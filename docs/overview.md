@@ -57,5 +57,12 @@ Tradier did with each: acknowledged, rejected, replaced, cancelled, filled.
 Tradier streams no account's orders on its sandbox, so the plugin reads each account's orders every 5 seconds: a fill is the growth in the order's executed quantity. Every fill carries the deployment's settlement date for it, and
 waits for it rather than go with a guess. An order placed in Tradier's own web app is
 never recorded as an order: its fills are reported on no order, for your
-execution plugin to accept or answer DK. A new account is read-only until
-the connectivity role's admin enables trading on it.
+execution plugin to accept or answer DK; Tradier states its symbol and no
+currency, so the fills are priced in its instrument's currency. A new
+account is read-only until the connectivity role's admin enables trading on
+it.
+
+Every order is placed directly at Tradier: it takes no request for quote,
+so an RFQ placement is rejected as unsupported, as is a good-till-date
+order, nothing sent. The time each call to Tradier takes, an order's
+acknowledgement and a fill's delay are shown on Connection.

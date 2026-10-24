@@ -6,10 +6,17 @@ vocabulary is read.
 `class=equity`): `market`, `limit`, `stop` and `stop_limit`; a `market`
 order for the `day`, the others for the `day` or `gtc`. Its `pre` and `post`
 durations, the extended sessions, have no counterpart among the contract's
-times in force, and are never offered; a good-till-date order is rejected
-`unsupported` before anything is sent. A buy is `buy`, a sale `sell`, a
+times in force, and are never offered; a good-till-date or good-till-time order is rejected
+`unsupported` before anything is sent (Tradier's durations carry no expiry),
+so an `Asked`'s `expire_date` and `expire_time_ns` (SDK 0.32.0) are never
+read. A buy is `buy`, a sale `sell`, a
 short sale `sell_short`. The placement's ID is the order's `tag`, which
 Tradier takes as letters, digits and dashes, as a placement's ID is.
+
+**Its placement types** (contract v27, W11.20): direct to Tradier alone
+(DMA). Tradier takes no request for quote -- its equities are routed to the
+market, no dealer quoting the firm -- so an RFQ placement is rejected
+`unsupported` before anything is sent (`placement_types`).
 
 **A replace** is `PUT /accounts/{id}/orders/{order_id}`: Tradier changes an
 order's type, duration, limit and stop, the order keeping its ID, and never
@@ -28,6 +35,11 @@ venue catalogue: the second key of the agents' demo-only guard, which
 counts a connection demo only while the setting and this both say
 `sandbox`. The simulated brokerage reaches no venue, so it reports
 `sandbox`.
+
+**What an order states of its instrument** (SDK 0.32.0): its symbol alone,
+and no currency -- Tradier states none for any order, holding or amount. So
+an order placed in Tradier's own app is resolved by its symbol, and its
+fills are priced in the currency its instrument's record names.
 """
 
 from __future__ import annotations
@@ -191,6 +203,10 @@ class TradierVenue:
 
     def catalogue(self, code: str) -> Catalogue:
         return CATALOGUE
+
+    def placement_types(self, code: str) -> tuple[int, ...]:
+        """Direct to Tradier alone: it takes no request for quote."""
+        return (ops.PLACEMENT_TYPE_DMA,)
 
     def place(self, code: str, asked: Asked) -> tuple[VenueOrder, str]:
         form = {

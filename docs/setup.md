@@ -48,10 +48,13 @@ statements under View or Open.
 
 A deployment admin makes the plugin available to the desk's execution
 plugin, whose admin links it and maps a book account to the account's
-venue account code, shown on **Trading**. A new account is read-only:
+venue account code, shown on **Connection**. A new account is read-only:
 every order on it is rejected as unsupported, nothing sent, until the
-connectivity role's admin presses **Enable trading** on Trading. Its
-catalogue is then published: `market` for the day; `limit`, `stop` and `stop_limit`, each day or GTC. Tradier takes no good-till-date order, and its pre- and post-market sessions have no counterpart.
+connectivity role's admin presses **Enable trading** there. Its catalogue
+is then published: `market` for the day; `limit`, `stop` and `stop_limit`,
+each day or GTC. Tradier takes no good-till-date order and no request for
+quote: every order is placed directly (DMA). Its pre- and post-market
+sessions have no counterpart.
 
 ## Sample data
 
