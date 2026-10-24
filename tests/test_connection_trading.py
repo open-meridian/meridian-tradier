@@ -21,6 +21,8 @@ from trading_cases import CODE, Rig, placement, scope
 #: Connection, which draws connectivity's sections, and its "Enable trading".
 TRADING = CONNECTION
 ENABLE_TRADING = "/enable-trading"
+#: Its Trading tab (the SDK's tab row, 0.32.3).
+TAB = {"tab": "trading"}
 
 ROLES = ("data", "connectivity")
 KEY = Credentials("trading-page-token-0000000000000009")
@@ -44,7 +46,7 @@ def test_trading_is_connections_and_its_tool_reads_the_same(tmp_path: Path) -> N
     assert client.get(TRADING, "admin").status == 200
     assert client.get(TRADING, "write").status == 403
     assert "/admin/connections" not in {page.path for page in pages.declared}
-    page = client.get(TRADING, "admin").text
+    page = client.get(TRADING, "admin", **TAB).text
     assert CODE in page and "Read-only" in page and "Enable trading" in page
     assert "Sample data" in page
     data = client.call_tool("read_connection").data["trading"]
@@ -57,7 +59,7 @@ def test_paper_is_said_plainly(tmp_path: Path) -> None:
     rig = Rig(Recorder("tradier"))
     config = Config(credentials=KEY, token_set=True, environment=SANDBOX)
     client = client_for(state_with(rig, config))
-    page = client.get(TRADING, "admin").text
+    page = client.get(TRADING, "admin", **TAB).text
     assert "Paper: Tradier&#39;s developer sandbox, simulated money" in page
     assert KEY.token not in page
     assert KEY.token not in str(client.call_tool("read_connection").json)
@@ -126,7 +128,7 @@ def test_the_connections_badge_is_both_keys(tmp_path: Path) -> None:
     tool reads the same."""
     rig = Rig(Recorder("tradier"))
     client = client_for(state_with(rig, Config(sample_data=True)))
-    page = client.get(TRADING, "admin").text
+    page = client.get(TRADING, "admin", **TAB).text
     assert "Demo" in page and "Tradier's sandbox host" in page
     data = client.call_tool("read_connection").data["trading"]
     assert data["reached_environment"] == "sandbox" and data["badge"] == "Demo"
@@ -136,7 +138,7 @@ def test_the_connections_badge_is_both_keys(tmp_path: Path) -> None:
         client.call_tool("read_connection").data["trading"]["badge"]
         == "Live (environment not confirmed)"
     )
-    assert "Live (environment not confirmed)" in client.get(TRADING, "admin").text
+    assert "Live (environment not confirmed)" in client.get(TRADING, "admin", **TAB).text
 
 
 def test_no_badge_before_there_is_a_client(tmp_path: Path) -> None:

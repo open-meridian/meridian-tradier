@@ -2,7 +2,7 @@
 
 ## 0.12.0
 
-On open-meridian 0.32.2, contract 27.
+On open-meridian 0.32.3, contract 27.
 
 - **One Connection for market data and orders** (ruling 457): Connection is
   the SDK's `connectivity.connection_pages`, connectivity's sections
@@ -10,8 +10,7 @@ On open-meridian 0.32.2, contract 27.
   after the data role's; "Enable trading" is made on it (`/enable-trading`).
   `read_connection` answers them as `trading`. **The Trading page and
   `read_trading` are gone**; `enable_trading` and `check_enable_trading`
-  keep their names. The page fits one screen once open-meridian 0.32.3's
-  tab row is in (the SDK's, never a template of the plugin's own).
+  keep their names. No tab code of the plugin's own.
 - **No copied code between plugins** (rulings 202 and 457): `trading_page.py`
   and the plugin's own `trading.html`, `account_links.html` and
   `raw_records.html` are deleted. Raw records is the SDK's
@@ -31,8 +30,9 @@ On open-meridian 0.32.2, contract 27.
   order acknowledgement and fill delay (`roles.Latency`), shown under
   Sessions; not reported until contract v28 (ruling 515). The suites' two
   `latency` cases are not presented, "core receives ReportLatency from
-  contract v28, ruling 515" (ruling 518). The stream's liveness (`records-a-datasets-liveness`) follows on
-  open-meridian 0.32.3, whose listings feed records it.
+  contract v28, ruling 515" (ruling 518). The stream's liveness is
+  presented (`records-a-datasets-liveness`): open-meridian 0.32.3's
+  listings feed records it for any message heard, no code of the plugin's.
 - **One dataset per timeliness** (ruling 551, after 382): a new dataset,
   `live_delayed`, the live kind from the developer sandbox, declaring its
   15-minute delay (`declared_delay_ns`); `live` is Live's, real time. The
@@ -47,7 +47,7 @@ On open-meridian 0.32.2, contract 27.
 - **The suites' v27 cases:** the seven rates cases (Tradier publishes no
   rates) and an RFQ dealer's quote (it takes no RFQ), not presented with why.
 - **Datasets** fits 1280x800: its line on the terms shortened.
-- **The pins**: open-meridian 0.32.2 and plugin-python:0.32.2 by digest;
+- **The pins**: open-meridian 0.32.3 and plugin-python:0.32.3 by digest;
   the core runtime and harness a5da59a by digest (chart 0.1.310); `meridian`
   0.1.52. The licence's new attribution fields are not set: core v27 refuses
   a catalogue carrying them.

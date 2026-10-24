@@ -8,6 +8,10 @@ under the same names on every data plugin.
 
 ## Connection (`read_connection`)
 
+One section at a time, under a tab row (Key, Limits and use, Stream,
+Trading, and Sessions once measured), so the page fits one screen;
+`read_connection` answers every section, the orders' under `trading`.
+
 - **Key:** the mode (Live, Sandbox, Sample data or No key; on the sandbox,
   Tradier's developer sandbox, delayed 15 minutes, no streaming); whether
   the token for the environment chosen is set, never its value; what
@@ -25,9 +29,8 @@ under the same names on every data plugin.
 ## Connection's trading sections
 
 One page for market data and for orders: for an admin of the connectivity
-role, Connection goes on with orders' sections, which `read_connection`
-answers under `trading`. **Environment**: Paper or Live, said plainly.
-**Accounts**: each account the access token reaches by its venue account
+role, the Trading tab holds the orders' sections. **Environment**: Paper
+or Live, said plainly. **Accounts**: each account the access token reaches by its venue account
 code, read-only or with trading enabled; **Enable trading** on a read-only
 account, for that admin alone (`enable_trading`). The order types its
 catalogue offers, and whether the execution plugin mapped it, are in the
@@ -36,7 +39,7 @@ pause or a stop, or of unknown outcome, and when the orders were last read.
 **Sessions**, once measured: each call to the brokerage API's round trip,
 an order's acknowledgement and a fill's delay. No account's data.
 
-The **Connection** badge, above the sections, says whether agents may
+The **Connection** badge, above the tab row, says whether agents may
 place orders on it: **Demo** where Environment says Sandbox and the session
 reached Tradier's sandbox host (`sandbox.tradier.com`), **Live** where
 neither does, and **Live (environment not confirmed)** where the two

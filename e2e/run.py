@@ -324,7 +324,9 @@ def run():
     must("tradier:daily" in shown and "573.86" not in shown and "<h2>Served</h2>" in shown,
          "step 7, the Datasets page, the role's, shows no price")
     shown = page("tradier", "admin", "/")
-    must("<h2>Key</h2>" in shown and "<h2>Limits and use</h2>" in shown, "step 7, the role's Connection")
+    # One group at a time under the SDK's tab row (0.32.3): Key first.
+    must("<h2>Key</h2>" in shown and "?tab=limits-and-use" in shown and "?tab=trading" in shown,
+         "step 7, the role's Connection")
 
     # 8. Storage: which listing each subject is, kept across a new container.
     compose("up", "-d", "--no-deps", "--force-recreate", "tradier")

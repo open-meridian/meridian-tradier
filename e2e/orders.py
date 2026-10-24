@@ -197,12 +197,12 @@ def run():
            "--user", "person:local|harness")
     mapped = desk("admin", f"/map?account={account}&code={CODE}")
     must(mapped == {"mapped": CODE}, f"step 1, mapped: {mapped}")
-    # From 0.12.0 connectivity's sections are Connection's (457).
-    trading = runner("page", "--instance", "tradier", "--level", "admin", "/",
+    # From 0.12.0 connectivity's sections are Connection's Trading tab (457).
+    trading = runner("page", "--instance", "tradier", "--level", "admin", "/?tab=trading",
                      "--until", CODE)
     must("Read-only" in trading and "Sample data" in trading,
          "step 1, the account read-only until trading is enabled on it")
-    runner("form", "--instance", "tradier", "--level", "admin", "--page", "/",
+    runner("form", "--instance", "tradier", "--level", "admin", "--page", "/?tab=trading",
            "--post", "/enable-trading", f"venue_account_code={CODE}",
            "--expect", "Trading enabled")
     runner("attribute", account, "waits=false", "note=No compliance plugin in this run.")

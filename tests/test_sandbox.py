@@ -202,7 +202,7 @@ def test_on_it_asks_the_sandbox_marks_data_delayed_and_opens_no_stream(tmp_path:
     assert quotes["what"] == "quotes, every exchange, delayed 15 minutes"
     page = client.get(CONNECTION, "admin").text
     assert SANDBOX_SAID.replace("'", "&#39;") in page and KEY not in page
-    assert "Does not stream" in page
+    assert "Does not stream" in client.get(CONNECTION, "admin", tab="stream").text
     datasets = client.call_tool("read_datasets").data
     feeds = {d["key"]: d["feed"] for d in datasets["served"]}
     assert set(feeds.values()) == {"consolidated, delayed, sandbox.tradier.com"}

@@ -64,10 +64,14 @@ def test_each_page_serves_manage_alone(client: PageClient) -> None:
 
 def test_the_connection_page_and_its_tool_read_one_source(client: PageClient) -> None:
     page = client.get(CONNECTION, "admin").text
-    # The data role's sections, in its order, with Tradier's rows at its blocks.
-    assert page.index("<h2>Key</h2>") < page.index("<h2>Limits and use</h2>")
-    assert page.index("<h2>Limits and use</h2>") < page.index("<h2>Stream</h2>")
-    assert "Sample data" in page and "60 a minute" in page and "Not entitled" in page
+    # The data role's sections under the SDK's tab row (0.32.3), in its order,
+    # Key first, with Tradier's rows at its blocks.
+    tabs = ("?tab=key", "?tab=limits-and-use", "?tab=stream", "?tab=trading")
+    assert [page.index(t) for t in tabs] == sorted(page.index(t) for t in tabs)
+    assert "<h2>Key</h2>" in page and "<h2>Stream</h2>" not in page
+    assert "Sample data" in page and "Not entitled" in page
+    assert "60 a minute" in client.get(CONNECTION, "admin", tab="limits-and-use").text
+    page = client.get(CONNECTION, "admin", tab="stream").text
     answer = client.call_tool("read_connection")
     assert answer.status == 200 and answer.outcome == "unchanged"
     data = answer.data
