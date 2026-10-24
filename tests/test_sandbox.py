@@ -64,6 +64,7 @@ def state_for(tmp: Path, sandbox: bool, transport: Scripted) -> State:
     answer_records(recorder, RECORDS)
     lake = Lake(recorder, source, Products(tmp / "products.json"), Clock(at("2026-10-10", 9)))
     lake.streaming = not config.on_sandbox
+    lake.delayed = config.on_sandbox
     wanted: list[list[str]] = []
 
     async def nothing(*_: object) -> None:
@@ -201,14 +202,17 @@ def test_on_it_asks_the_sandbox_marks_data_delayed_and_opens_no_stream(tmp_path:
     assert quotes["what"] == "quotes, every exchange, delayed 15 minutes"
     page = client.get(CONNECTION, "admin").text
     assert SANDBOX_SAID.replace("'", "&#39;") in page and KEY not in page
-    assert "Does not stream" in page
+    assert "Does not stream" in client.get(CONNECTION, "admin", tab="stream").text
     datasets = client.call_tool("read_datasets").data
     feeds = {d["key"]: d["feed"] for d in datasets["served"]}
     assert set(feeds.values()) == {"consolidated, delayed, sandbox.tradier.com"}
     at_vendor = {d["key"]: d["entitled_at_vendor"] for d in datasets["served"]}
+    # One dataset per timeliness (ruling 551): the sandbox's live data is
+    # `live_delayed`'s; `live`, real time, is not served on it.
     assert at_vendor == {
         "daily": "Yes, delayed 15 minutes",
-        "live": "Yes, delayed 15 minutes",
+        "live": "No: the sandbox's is delayed",
+        "live_delayed": "Yes, delayed 15 minutes",
         "trades": "No: the sandbox does not stream",
     }
     assert datasets["streamed"] == 0 and not any(w["streamed"] for w in datasets["wants"])
@@ -239,5 +243,11 @@ def test_off_it_asks_tradier_in_real_time_and_streams(tmp_path: Path) -> None:
     }
     datasets = client.call_tool("read_datasets").data
     assert {d["feed"] for d in datasets["served"]} == {"consolidated, api.tradier.com"}
-    assert all(d["entitled_at_vendor"] == "Yes" for d in datasets["served"])
+    at_vendor = {d["key"]: d["entitled_at_vendor"] for d in datasets["served"]}
+    assert at_vendor == {
+        "daily": "Yes",
+        "live": "Yes",
+        "live_delayed": "No: Live is real time",
+        "trades": "Yes",
+    }
     assert datasets["streamed"] == 1

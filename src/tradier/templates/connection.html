@@ -1,4 +1,8 @@
-{#- Connection, at admin: the data role's (meridian/roles/data/connection.html),
+{#- Connection, at admin, one page for the data role and connectivity (457;
+    `meridian.roles.connectivity.connection_pages`): the data role's
+    (meridian/roles/data/connection.html), one group at a time under the
+    SDK's tab row (0.32.3: Key, Limits and use, Stream, Trading, and Sessions
+    once measured),
     with Tradier's nuance at its blocks only -- the head's status, a line
     saying which environment and host is asked, the environment and what the
     token is not served under "Key", and the stream's session under "Stream"
@@ -6,7 +10,7 @@
     no market data. -#}
 {% extends "meridian/roles/data/connection.html" %}
 {% import "meridian/roles/_rows.html" as om %}
-{% block status %}<om-status data-om-header state="{{ head.state }}" label="{{ head.label }}">{{ head.label }}</om-status>{% endblock %}
+{% block status %}{% set head = connection_status(data) %}<om-status data-om-header state="{{ head.state }}" label="{{ head.label }}">{{ head.label }}</om-status>{% endblock %}
 {% block vendor_notices %}
 <p class="muted wide-only">{% if data.mode in ("Live", "Sandbox") %}{{ data.detail }} {% endif %}{% if data.host %}Asked at {{ data.host }}.{% endif %}</p>
 {% endblock %}

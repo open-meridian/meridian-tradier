@@ -41,10 +41,13 @@ def test_the_declaration_carries_its_pages_tools_and_documentation(
         "Account links",
         "Statements",
         "History",
-        "Trading",
         "Raw records",
     ]
-    assert declared["tools"], "the tools its typed routes make"
+    # One Connection for data and connectivity (457): no Trading page, and
+    # Enable trading made on Connection.
+    tools = {tool["name"] for tool in declared["tools"]}
+    assert "read_trading" not in tools
+    assert {"read_connection", "enable_trading", "check_enable_trading"} <= tools
     sections = declared["documentation"]
     assert [section["name"] for section in sections] == SECTIONS
     for section in sections:

@@ -11,9 +11,16 @@ data plugin shows no market data: prices, trades and quotes are the reading
 roles' to read, under their entitlement, and an admin page shows no
 account's data.
 
-Each page fits one screen at 1440x900 and 390x844: one-line rows, the
-details a click away, and the standing wants, which grow, drawn the latest
-few with how many there are (the tool answers every one).
+From 0.12.0 (SDK 0.32.0; rulings 202 and 457) Connection is one page for
+the data role and connectivity, the SDK's
+(`meridian.roles.connectivity.connection_pages`): connectivity's Trading is
+`read_connection`'s `trading`, drawn as Connection's further sections
+(Environment, Accounts, Placements), with "Enable trading" made on it; and
+Raw records is the SDK's (`raw_records_page`). No Trading page of its own.
+
+Each page fits one screen at 375, 582 and 1280 pixels wide: one-line rows,
+the details a click away, and the standing wants, which grow, drawn the
+latest few with how many there are (the tool answers every one).
 """
 
 from __future__ import annotations
@@ -26,22 +33,22 @@ from typing import Any
 
 import meridian
 from meridian.plugin.v1 import operations_pb2 as ops
-from meridian.roles import data
+from meridian.roles import Latency, connectivity, data
 from meridian.roles.connectivity import Trader
 
 from .convert import NEW_YORK
 from .custody import Syncer
 from .declared import CATALOGUE
-from .kinds import Store
-from .lake import DAILY, LIVE, PRICE, QUOTE, TRADES, Lake
+from .kinds import KINDS, Store
+from .lake import DAILY, LIVE, LIVE_DELAYED, PRICE, QUOTE, TRADES, Lake
 from .records import ConnectionRead, DatasetsRead, FeedRead, Served, SessionRead, Want
-from .settings import SANDBOX, SANDBOX_SAID, Config
+from .settings import SAID, SANDBOX, SANDBOX_SAID, Config
 from .source import TradierSource
 from .stream import Streamer
 from .vendor import LIMIT_PER_MINUTE, NS, Tradier, Usage
 
 TITLE = "Tradier"
-CONNECTION = "/"
+CONNECTION = connectivity.CONNECTION
 DATASETS = "/datasets"
 #: Tradier's own limit on market data per token, of which the client spends
 #: half.
@@ -78,8 +85,12 @@ class State:
     store: Store | None = None
     scope: meridian.AccountScope = field(default_factory=meridian.AccountScope)
     values: dict[str, object] = field(default_factory=dict)
-    #: How often the orders are read, as the Trading page says it.
+    #: How often the orders are read, as Connection's Placements say it.
     polled: str = ""
+    #: The sessions' latency (contract v27): the Trader's calls to Tradier's
+    #: brokerage API, recorded for Connection's Sessions; not yet reported
+    #: (core receives ReportLatency from contract v28, ruling 515).
+    latency: Latency | None = None
 
 
 _state = State()
@@ -214,6 +225,7 @@ def session_read(state: State) -> SessionRead:
 SERVES = {
     DAILY: "closes and daily bars",
     LIVE: "last, bid and ask; quotes",
+    LIVE_DELAYED: "last, bid and ask; quotes, delayed 15 minutes",
     TRADES: "time and sales",
 }
 
@@ -234,9 +246,23 @@ def datasets_read(state: State) -> DatasetsRead:
     delayed = ", delayed" if state.config.on_sandbox else ""
     feed = f"consolidated{delayed}, {asked}" if asked else "consolidated"
     served: list[Served] = []
+    # One dataset per timeliness (ruling 551): the live kind's counts are the
+    # dataset the environment records into now; the other's are none.
+    in_force = LIVE_DELAYED if state.config.on_sandbox else LIVE
     for declared in CATALOGUE:
-        counts = lake.counts[declared.key] if lake is not None else None
-        if connection.mode == "Sample data":
+        live_kind = declared.key in (LIVE, LIVE_DELAYED)
+        counts = (
+            None
+            if lake is None or (live_kind and declared.key != in_force)
+            else lake.counts[LIVE if live_kind else declared.key]
+        )
+        if live_kind and declared.key != in_force:
+            at_vendor = (
+                "No: Live is real time"
+                if declared.key == LIVE_DELAYED
+                else "No: the sandbox's is delayed"
+            )
+        elif connection.mode == "Sample data":
             at_vendor = "Yes"
         elif connection.mode == "No key" or not connection.entitled_at_vendor:
             at_vendor = "Not asked yet"
@@ -247,7 +273,7 @@ def datasets_read(state: State) -> DatasetsRead:
             at_vendor = "Yes, delayed 15 minutes"
         else:
             at_vendor = "Yes"
-        dataset = lake.dataset(declared.key) if lake is not None else declared.key
+        dataset = lake.named(declared.key) if lake is not None else declared.key
         served.append(
             Served(
                 dataset=dataset,
@@ -379,25 +405,35 @@ def figures(state: State) -> list[meridian.Figure]:
     )
 
 
-@pages.page(
-    CONNECTION,
-    "Connection",
-    levels="admin",
-    roles="data",
-    answers=ConnectionRead,
-    name="read_connection",
-    description=(
-        "The plugin's connection to Tradier, as every data plugin's Connection answers it: "
-        "the mode (Live, Sandbox, Sample data or No key), the token for the environment "
-        "chosen and whether it is set (never its value), what Tradier serves the token, "
-        "the limit and this process's calls, the last call and error, and the streaming "
-        "sessions (none on the sandbox, which does not stream); then Tradier's own: the "
-        "environment and host, the feeds, and the stream's session. No market data."
-    ),
+def environment() -> str:
+    """The environment as Connection's Trading says it: Paper (the developer
+    sandbox, simulated money) or Live, or sample data."""
+    config = current().config
+    if config.sample_data:
+        return "Sample data: a simulated brokerage, nothing sent to Tradier"
+    return SAID[config.environment]
+
+
+async def connection_record(request: meridian.Request) -> ConnectionRead:
+    """Connection's record, the data role's with Tradier's fields; the SDK
+    adds connectivity's Trading."""
+    return connection_read(_state)
+
+
+pages.environment.globals["connection_status"] = lambda read: status(read)
+
+connectivity.connection_pages(
+    pages,
+    current,
+    connection_record,
+    venue=TITLE,
+    credentials=lambda: [data.Credential("Access token", current().config.token_set)],
+    environment=environment,
+    environment_setting=lambda: current().config.environment_setting,
+    updates=lambda: current().polled,
+    latency=lambda: current().latency,
+    template="connection.html",
 )
-async def connection(request: meridian.Request) -> meridian.Response:
-    read = connection_read(_state)
-    return pages.answer("connection.html", read, head=status(read))
 
 
 @pages.page(
@@ -425,9 +461,20 @@ async def datasets(request: meridian.Request) -> meridian.Response:
     return pages.answer("datasets.html", drawn, wants=len(read.wants))
 
 
-# The account side's pages, declared after the data role's: connectivity's,
-# then custody's.
-from . import custody_pages, trading_page  # noqa: E402,F401,I001
+# Custody's pages, then Raw records, for custody and connectivity (the SDK's,
+# 0.32.0).
+from . import custody_pages  # noqa: E402,F401,I001
+
+connectivity.raw_records_page(
+    pages,
+    current,
+    kinds=KINDS,
+    why=(
+        "Tradier's answers as received, any JSON it sent, which no typed record holds; an "
+        "agent reads what they came to with read_statements and read_account_activities, "
+        "and in the book's placements and executions, each naming its raw record"
+    ),
+)
 
 
 def serve(plugin: meridian.Plugin, state: State, port: int) -> Any:

@@ -8,13 +8,17 @@ quantity that works or fills), and run through the SDK's Trader
 against the runner's recorder; only the sidecar is stood in for. SIMULATED
 ONLY: nothing reaches Tradier.
 
-Eleven cases are not presented, each with why (`NOT_PRESENTED`), as the
+Thirteen cases are not presented, each with why (`NOT_PRESENTED`), as the
 suite lets a case marked `about` or `about_field` be: calendars, locates, a
 fill's place of execution, compliance waits, and from contract v23 a bust
 (`about: busts`; Tradier states no bust or correction), a charge with no
 fill (`about: charges without a fill`), a charge re-reported on an accepted
 placement (`about: venue-originated fills`; Tradier's orders carry no fee)
-and a value-date roll. Every other case passes, among them v23's fills of
+and a value-date roll; from contract v27 a dealer's quote on an RFQ
+placement (`about: rfqs`; Tradier takes no request for quote) and the
+session's round trip reported (`about: latency`, until contract v28, ruling
+518: the Trader records it, and sends no ReportLatency yet). Every other
+case passes, among them v23's fills of
 orders placed in Tradier's own web app, reported on no placement, and a
 later fill on the placement an accept created.
 """
@@ -69,6 +73,13 @@ NOT_PRESENTED = {
         "Tradier's trades settle on their settlement dates: it rolls no spot position at a "
         "daily cut"
     ),
+    # Contract v27: an RFQ's dealers' quotes (about rfqs), and the session's
+    # round trip reported (about latency; ruling 518).
+    "records-a-dealers-quote-on-an-rfq-placement": (
+        "Tradier takes no request for quote: its equities are routed to the market, no dealer "
+        "quoting the firm, so it takes DMA placements alone"
+    ),
+    "reports-a-sessions-round-trip": "core receives ReportLatency from contract v28, ruling 515",
 }
 
 ACCEPTED = "PLC-01JAE0000000000000000ACPT"

@@ -42,8 +42,13 @@ as for every plugin.
 - `src/tradier/page.py` and `records.py`: the data role's Connection and
   Datasets (spec/plugin-pages-follow-their-role), under Manage, each a read
   tool (`read_connection`, `read_datasets`) answering the role's common
-  fields, `meridian.roles.data`'s records extended with Tradier's. Their
-  templates extend the role's and add Tradier's nuance at its blocks alone
+  fields, `meridian.roles.data`'s records extended with Tradier's. From
+  0.12.0 Connection is one page for data and connectivity, the SDK's
+  (`connectivity.connection_pages`, ruling 457), `read_connection`
+  answering connectivity's sections as `trading`; and Raw records is the
+  SDK's (`raw_records_page`). Never copy an SDK page, record or template
+  into the plugin (rulings 202 and 457). Their templates extend the role's
+  and add Tradier's nuance at its blocks alone
   (`vendor_notices`, `vendor_rows`, `vendor_columns`, `vendor_sections`):
   never rename, reorder or drop a common section, row, column or label. No
   page shows a price: prices are the reading roles', under their
@@ -58,8 +63,10 @@ as for every plugin.
   reported; fills derived to one ID however often they are read; pauses and
   stops; enabling trading and the catalogue. `venue.py` is Tradier's words for
   it, `broker.py` the one module that speaks to its brokerage API (sandbox or
-  live, every exchange a raw record first, `kinds.py`), `trading_page.py` the
-  Trading page (the SDK's `trading_read` and template) and Raw records. From
+  live, every exchange a raw record first, `kinds.py`). From 0.12.0 the
+  adapter declares its placement types (`placement_types`: DMA alone,
+  Tradier takes no RFQ), and the Trader records the brokerage API's session
+  latency (`roles.Latency`, shown on Connection, not yet reported). From
   0.7.0 an order placed in Tradier's own web app has its fills reported on no
   placement (`Originated`, `Watched`: `trading/originated.json`), and the
   placement an accept creates is followed for its later fills.

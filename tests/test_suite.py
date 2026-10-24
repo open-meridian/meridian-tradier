@@ -3,7 +3,7 @@ run unchanged against this plugin: every case mapped to the plugin's own convers
 Tradier's recorded exchange and stream, through the lake's half it runs in
 production (lake.py), against the suite's `Recorder`.
 
-Thirteen cases are not presented, each with why (`NOT_PRESENTED`). Two are about
+Twenty-one cases are not presented, each with why (`NOT_PRESENTED`). Two are about
 kinds of data Tradier's US stock data never publishes (`about`, from
 contract v19): a currency's rate against another currency, and a crypto
 asset's price. Three are about a field its time and sales never state
@@ -27,6 +27,12 @@ the venue leaves unstated. `queries-the-lake-within-bounds` is mapped as
 the SDK's data template maps it: one bounded query of a kind the role
 reads, trades, of a listing it records (`lake_query`); the plugin itself
 asks the lake nothing. The event group heard and read is the SDK's.
+
+From contract v27, the seven rates cases (`about` rates), which Tradier's
+stock data never publishes, and the feed delay reported (`about` latency,
+until contract v28, ruling 518: recorded, never yet reported). The stream's
+liveness is presented: from open-meridian 0.32.3 the listings feed records
+it for any message heard, a day's summary among them.
 """
 
 from __future__ import annotations
@@ -40,7 +46,7 @@ from pathlib import Path
 from typing import Any
 
 from meridian.plugin.v1 import operations_pb2 as ops
-from meridian.roles.data.testing import lake_query
+from meridian.roles.data.testing import RATES_CASES, lake_query
 from meridian.suites import Recorder, run
 
 from tradier import convert
@@ -95,6 +101,10 @@ NOT_PRESENTED = {
     "reports-a-flag-the-venue-does-not-state": (
         "Tradier's stock data lists no event contract: no event whose flags go unstated"
     ),
+    # Contract v27: the rates slice (about rates), and the feed delay reported
+    # (about latency; ruling 518).
+    **{case: "Tradier's US stock data publishes no rates" for case in RATES_CASES},
+    "reports-its-feed-delay": "core receives ReportLatency from contract v28, ruling 515",
 }
 
 #: A moment in the session, for the stream's events: epoch milliseconds.
@@ -192,6 +202,11 @@ def producers(tmp: Path) -> dict[str, Producer]:
             event(type="quote", symbol="SPY", bid="575.45", bidsz=3, ask="575.48", asksz=2),
         )
 
+    async def alive(recorder: Recorder) -> None:
+        # Contract v27 (0.32.3's listings feed): a stream message with no price
+        # changed -- a day's summary -- is the live dataset's liveness.
+        await streamed(recorder, event(type="summary", symbol="SPY", open="570.10"))
+
     async def one_sided(recorder: Recorder) -> None:
         # BRK/B's offer side empty: Tradier sends it as 0.
         await streamed(
@@ -284,6 +299,7 @@ def producers(tmp: Path) -> dict[str, Producer]:
         "a-condition-not-converted": not_converted,
         "a-trade-withdrawn": withdrawn_trade,
         "a-quote-recorded": quote,
+        "records-a-datasets-liveness": alive,
         "a-one-sided-quote": one_sided,
         "a-standing-want-streamed": standing_streamed,
         "a-trade-recorded": standing_streamed,
@@ -299,7 +315,7 @@ def test_the_data_suite_passes_unchanged(tmp_path: Path) -> None:
     assert report.passed, report.failures
     # Contract v24: and the two cases every suite holds, which the SDK answers.
     # Contract v26: the bounded lake query, and the event group the SDK answers.
-    assert len(report.passed_cases) == 22
+    assert len(report.passed_cases) == 23
     assert report.answered_by_sdk == [
         "hears-and-reads-a-replacement",
         "reads-the-template-catalogue",

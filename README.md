@@ -22,15 +22,21 @@ It is the second half of the retail pair, beside
 [meridian-alpaca](https://github.com/open-meridian/plugin-alpaca): both
 pass the same suites of the SDK, unchanged.
 
-**Status:** 0.11.1, on open-meridian 0.31.1 (contract 26): its connectivity
-work the SDK's (`meridian.roles.connectivity`), and from 0.11.0 its listings
-in the lake too (`meridian.roles.data.listings`); the environment its
-session reached on its venue catalogue, the agents' demo-only guard's second
-key; its whole declaration,
-and its documentation in [docs/](docs/), which a deployment shows on its
-Documentation tab; the daily dataset names the US equity
+**Status:** 0.12.0, on open-meridian 0.32.3 (contract 27): one Connection
+for market data and orders, the SDK's (`connection_pages`, ruling 457), and
+Raw records the SDK's, no page or template copied between plugins (rulings
+202 and 457); the placement types it takes declared (DMA alone: Tradier
+takes no request for quote); the brokerage API's session latency recorded
+and shown. Its connectivity work is the SDK's
+(`meridian.roles.connectivity`), its listings in the lake too
+(`meridian.roles.data.listings`); the environment its session reached on its
+venue catalogue, the agents' demo-only guard's second key; its whole
+declaration, and its documentation in [docs/](docs/), which a deployment
+shows on its Documentation tab; the daily dataset names the US equity
 calendar (contract 24's `calendar_id`). Not released; its pins are the
-released SDK, CLI and core v26 (17a13a2), by tag and digest.
+released SDK, CLI 0.1.52 and core v27 (a5da59a), by tag and digest.
+Connection draws one group at a time under the SDK's tab row, and the
+stream's liveness is recorded by the SDK's listings feed.
 
 ## What it serves
 
@@ -38,6 +44,7 @@ released SDK, CLI and core v26 (17a13a2), by tag and digest.
 |---|---|---|---|---|
 | `daily` | each listing's close and daily bar (open, high, low, close, volume) for a business date, New York's day ending at the 16:00 close | Tradier's daily history, consolidated across exchanges | pulled when a reader's read is wanted; pushed once a session's close is final, for the listings it has served | kept; personal use |
 | `live` | the last trade's price (`last`), the best bid and ask; the best bid and offer as a quote, with its sizes in shares | Tradier's quotes, consolidated from every exchange, real time for a Tradier Brokerage account holder | pulled for a read; while a standing want stands, prices kept current once a minute and quotes streamed, at most one a second per listing | served, not kept; personal use |
+| `live_delayed` | the same as `live` (ruling 551, one dataset per timeliness), declaring a 15-minute delay | Tradier's developer sandbox, delayed 15 minutes, recorded while Environment is Sandbox (`live` while it is Live) | pulled for a read; while a standing want stands, kept current once a minute; never streamed | served, not kept; personal use |
 | `trades` | each time and sale with the platform's trade attributes and Tradier's sequence number | Tradier's stream | streamed for the listings under a standing want | kept two days; personal use |
 
 - A daily price is keyed by a plain date, Tradier's own `date`. A day still
@@ -166,8 +173,8 @@ for an individual it does not expire.
    developer sandbox: delayed 15 minutes, no streaming", and **Stream**
    says "Does not stream". With no token, "No key yet", linking to
    Settings. **Datasets** names the host asked.
-5. On the deployment's **Data sources** page, license `daily`, `live` and
-   `trades`,
+5. On the deployment's **Data sources** page, license `daily`, `live`
+   (Live's), `live_delayed` (the sandbox's) and `trades`,
    and entitle the plugins that read prices.
 
 The same token trades for connectivity: on **Live** your brokerage

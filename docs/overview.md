@@ -8,7 +8,7 @@ It holds three roles, `data`, `custody` and `connectivity`: the first-use path, 
 
 ## Its datasets
 
-It serves three datasets:
+It serves four datasets, live data one per timeliness:
 
 - **Daily** (`tradier:daily`): each listing's close and daily bar for a
   business date, from Tradier's daily history, consolidated across
@@ -20,7 +20,13 @@ It serves three datasets:
   ask, consolidated from every exchange and real time for a Tradier
   Brokerage account holder. Kept current once a minute while something is
   reading them; the best bid and offer, with its sizes in shares, streamed as
-  it changes, at most once a second.
+  it changes, at most once a second. Recorded while Environment is Live.
+- **Live, delayed** (`tradier:live_delayed`): the same from Tradier's
+  developer sandbox, delayed 15 minutes, as it declares; recorded while
+  Environment is Sandbox, kept current by reading, never streamed.
+
+## Its trades
+
 - **Trades** (`tradier:trades`): each of Tradier's time and sales, streamed
   while something is reading the listing, with what it may count for in a
   day's high, low, open, close and volume where Tradier says. Kept two days
@@ -57,5 +63,12 @@ Tradier did with each: acknowledged, rejected, replaced, cancelled, filled.
 Tradier streams no account's orders on its sandbox, so the plugin reads each account's orders every 5 seconds: a fill is the growth in the order's executed quantity. Every fill carries the deployment's settlement date for it, and
 waits for it rather than go with a guess. An order placed in Tradier's own web app is
 never recorded as an order: its fills are reported on no order, for your
-execution plugin to accept or answer DK. A new account is read-only until
-the connectivity role's admin enables trading on it.
+execution plugin to accept or answer DK; Tradier states its symbol and no
+currency, so the fills are priced in its instrument's currency. A new
+account is read-only until the connectivity role's admin enables trading on
+it.
+
+Every order is placed directly at Tradier: it takes no request for quote,
+so an RFQ placement is rejected as unsupported, as is a good-till-date
+order, nothing sent. The time each call to Tradier takes, an order's
+acknowledgement and a fill's delay are shown on Connection.
