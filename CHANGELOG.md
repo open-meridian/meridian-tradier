@@ -31,10 +31,19 @@ On open-meridian 0.32.2, contract 27.
   order acknowledgement and fill delay (`roles.Latency`), shown under
   Sessions; not reported until contract v28 (ruling 515). The suites' two
   `latency` cases are not presented, "core receives ReportLatency from
-  contract v28, ruling 515" (ruling 518). No dataset declares a delay: the
-  catalogue is one for both environments, and Live is real time. The
-  stream's liveness (`records-a-datasets-liveness`) follows on
+  contract v28, ruling 515" (ruling 518). The stream's liveness (`records-a-datasets-liveness`) follows on
   open-meridian 0.32.3, whose listings feed records it.
+- **One dataset per timeliness** (ruling 551, after 382): a new dataset,
+  `live_delayed`, the live kind from the developer sandbox, declaring its
+  15-minute delay (`declared_delay_ns`); `live` is Live's, real time. The
+  live kind is recorded into whichever the environment provides, and a want
+  of the other is declined not entitled; on a change of environment the
+  live kind's standing wants are let go, for the lake to ask again. Daily
+  closes are end of day in both, and the sandbox streams no trades, so
+  `daily` and `trades` stay one each. **On upgrading:** license and entitle
+  `live_delayed` on Data sources; rows the sandbox recorded under `live`
+  before 0.12.0 stay as they were (`live` is served, not kept), and none
+  is recorded there again while Environment is Sandbox.
 - **The suites' v27 cases:** the seven rates cases (Tradier publishes no
   rates) and an RFQ dealer's quote (it takes no RFQ), not presented with why.
 - **Datasets** fits 1280x800: its line on the terms shortened.

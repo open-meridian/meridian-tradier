@@ -44,6 +44,7 @@ Connection's tab row and the stream's liveness follow on open-meridian
 |---|---|---|---|---|
 | `daily` | each listing's close and daily bar (open, high, low, close, volume) for a business date, New York's day ending at the 16:00 close | Tradier's daily history, consolidated across exchanges | pulled when a reader's read is wanted; pushed once a session's close is final, for the listings it has served | kept; personal use |
 | `live` | the last trade's price (`last`), the best bid and ask; the best bid and offer as a quote, with its sizes in shares | Tradier's quotes, consolidated from every exchange, real time for a Tradier Brokerage account holder | pulled for a read; while a standing want stands, prices kept current once a minute and quotes streamed, at most one a second per listing | served, not kept; personal use |
+| `live_delayed` | the same as `live` (ruling 551, one dataset per timeliness), declaring a 15-minute delay | Tradier's developer sandbox, delayed 15 minutes, recorded while Environment is Sandbox (`live` while it is Live) | pulled for a read; while a standing want stands, kept current once a minute; never streamed | served, not kept; personal use |
 | `trades` | each time and sale with the platform's trade attributes and Tradier's sequence number | Tradier's stream | streamed for the listings under a standing want | kept two days; personal use |
 
 - A daily price is keyed by a plain date, Tradier's own `date`. A day still
@@ -172,8 +173,8 @@ for an individual it does not expire.
    developer sandbox: delayed 15 minutes, no streaming", and **Stream**
    says "Does not stream". With no token, "No key yet", linking to
    Settings. **Datasets** names the host asked.
-5. On the deployment's **Data sources** page, license `daily`, `live` and
-   `trades`,
+5. On the deployment's **Data sources** page, license `daily`, `live`
+   (Live's), `live_delayed` (the sandbox's) and `trades`,
    and entitle the plugins that read prices.
 
 The same token trades for connectivity: on **Live** your brokerage

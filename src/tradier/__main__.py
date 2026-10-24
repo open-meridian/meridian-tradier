@@ -232,6 +232,9 @@ async def watch_settings(
         if state.lake is not None:
             state.lake.source = state.source
             state.lake.streaming = not state.config.on_sandbox
+            # One dataset per timeliness (ruling 551): the sandbox's live
+            # data is delayed 15 minutes, recorded into `live_delayed`.
+            state.lake.use_delayed(state.config.on_sandbox)
             if state.config.sample_data:
                 # The built-in exchange's listings, as a source's own list.
                 await state.lake.seed(sorted(spelled(s) or s for s in exchange()["history"]))

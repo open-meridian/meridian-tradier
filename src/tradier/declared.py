@@ -5,7 +5,7 @@ Built from the plugin's code and used twice: `__main__` registers with it,
 and `meridian plugin upload` reads the same one from the built image
 (pyproject.toml's `[tool.meridian] declaration`).
 
-**The catalogue** (contracts v18 and v19), three datasets apart, as the lake
+**The catalogue** (contracts v18 and v19), four datasets apart, as the lake
 plan's Q21 and Q40 have a source's daily and live data and its trades:
 
 - `daily`: closes and daily bars, from Tradier's daily history, consolidated
@@ -19,7 +19,13 @@ plan's Q21 and Q40 have a source's daily and live data and its trades:
   a standing want stands its prices kept current once a minute and its
   quotes streamed. A last price names the exchange its trade printed on, by
   Tradier's code; the catalogue, written in code before any venue is
-  resolved, names none.
+  resolved, names none. Real time: Live's, no declared delay.
+- `live_delayed` (from 0.12.0; ruling 551, one dataset per timeliness): the
+  same as `live`, from Tradier's developer sandbox, delayed 15 minutes
+  (`declared_delay_ns`), so its staleness and age are judged against the
+  delay; recorded only while Environment is Sandbox, as `live` only while it
+  is Live. The sandbox streams nothing, so its prices and quotes are kept
+  current by reading them.
 - `trades` (contract v19): each of Tradier's time and sales prints with its
   attributes, streamed for the listings under a standing want, and only
   streamed (lake.py says why); apart from the live prices (the plan's Q40),
@@ -52,7 +58,7 @@ from meridian import DatasetDeclaration, DatasetLicence
 
 from .convert import DAY_END_MINUTE
 from .kinds import KINDS
-from .lake import DAILY, LIVE, LIVE_CADENCE_SECONDS, TRADES
+from .lake import DAILY, LIVE, LIVE_CADENCE_SECONDS, LIVE_DELAYED, TRADES
 
 VENDOR = "Tradier"
 #: How long a raw response is kept: the reach of a re-conversion.
@@ -61,6 +67,8 @@ RETENTION_DAYS = max(kind.window_days for kind in KINDS)
 TRADES_KEPT_DAYS = 2
 #: Tradier documents no limit to its daily history: none is stated.
 HISTORY_DAYS = 0
+#: How far behind real time the developer sandbox serves quotes: 15 minutes.
+SANDBOX_DELAY_NS = 15 * 60 * 1_000_000_000
 
 #: The platform's US equity venues (NYSE markets) calendar, read from the
 #: platform on 2026-10-14 (the v24 plan's O10): the daily dataset's business
@@ -98,6 +106,19 @@ CATALOGUE = (
         ),
         day_time_zone="America/New_York",
         day_end_minute=DAY_END_MINUTE,
+    ),
+    DatasetDeclaration(
+        key=LIVE_DELAYED,
+        vendor=VENDOR,
+        data_types=["meridian.v1.Price", "meridian.v1.Quote"],
+        modes=["pull"],
+        cadence=LIVE_CADENCE_SECONDS,
+        licence_default=DatasetLicence(
+            kept=False, derived_use=True, display=True, personal_use=True
+        ),
+        day_time_zone="America/New_York",
+        day_end_minute=DAY_END_MINUTE,
+        declared_delay_ns=SANDBOX_DELAY_NS,
     ),
     DatasetDeclaration(
         key=TRADES,

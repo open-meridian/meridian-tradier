@@ -40,7 +40,7 @@ from .convert import NEW_YORK
 from .custody import Syncer
 from .declared import CATALOGUE
 from .kinds import KINDS, Store
-from .lake import DAILY, LIVE, PRICE, QUOTE, TRADES, Lake
+from .lake import DAILY, LIVE, LIVE_DELAYED, PRICE, QUOTE, TRADES, Lake
 from .records import ConnectionRead, DatasetsRead, FeedRead, Served, SessionRead, Want
 from .settings import SAID, SANDBOX, SANDBOX_SAID, Config
 from .source import TradierSource
@@ -225,6 +225,7 @@ def session_read(state: State) -> SessionRead:
 SERVES = {
     DAILY: "closes and daily bars",
     LIVE: "last, bid and ask; quotes",
+    LIVE_DELAYED: "last, bid and ask; quotes, delayed 15 minutes",
     TRADES: "time and sales",
 }
 
@@ -245,9 +246,23 @@ def datasets_read(state: State) -> DatasetsRead:
     delayed = ", delayed" if state.config.on_sandbox else ""
     feed = f"consolidated{delayed}, {asked}" if asked else "consolidated"
     served: list[Served] = []
+    # One dataset per timeliness (ruling 551): the live kind's counts are the
+    # dataset the environment records into now; the other's are none.
+    in_force = LIVE_DELAYED if state.config.on_sandbox else LIVE
     for declared in CATALOGUE:
-        counts = lake.counts[declared.key] if lake is not None else None
-        if connection.mode == "Sample data":
+        live_kind = declared.key in (LIVE, LIVE_DELAYED)
+        counts = (
+            None
+            if lake is None or (live_kind and declared.key != in_force)
+            else lake.counts[LIVE if live_kind else declared.key]
+        )
+        if live_kind and declared.key != in_force:
+            at_vendor = (
+                "No: Live is real time"
+                if declared.key == LIVE_DELAYED
+                else "No: the sandbox's is delayed"
+            )
+        elif connection.mode == "Sample data":
             at_vendor = "Yes"
         elif connection.mode == "No key" or not connection.entitled_at_vendor:
             at_vendor = "Not asked yet"
@@ -258,7 +273,7 @@ def datasets_read(state: State) -> DatasetsRead:
             at_vendor = "Yes, delayed 15 minutes"
         else:
             at_vendor = "Yes"
-        dataset = lake.dataset(declared.key) if lake is not None else declared.key
+        dataset = lake.named(declared.key) if lake is not None else declared.key
         served.append(
             Served(
                 dataset=dataset,

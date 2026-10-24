@@ -6,7 +6,7 @@
 {% extends "meridian/roles/data/datasets.html" %}
 {% import "meridian/roles/_rows.html" as om %}
 {% block vendor_notices %}
-<p class="muted"><span class="wide-only">Daily: New York's day to 16:00; live: last, bid, ask and quotes; time and sales, streamed. Tradier's terms until licensed. A gap after a restart is not caught up.</span>{% if wants > data.wants|length %} The latest {{ data.wants|length }} of {{ wants }} standing wants are shown.{% endif %}</p>
+<p class="muted"><span class="wide-only">Daily: New York's day to 16:00; live: last, bid, ask, quotes; trades streamed, a restart's gap not caught up.</span>{% if wants > data.wants|length %} The latest {{ data.wants|length }} of {{ wants }} standing wants are shown.{% endif %}</p>
 {% endblock %}
 {% block vendor_columns %}
 {% if row is none %}<th class="wide-only">Feed</th>{% else %}<td class="wide-only">{{ row.feed }}</td>{% endif %}

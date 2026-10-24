@@ -32,7 +32,8 @@ Tradier states no currency for any holding or amount. On **Account currency**, a
 ## 3. License and entitle its datasets
 
 A deployment admin, on the deployment's **Data sources** page, licenses
-`daily`, `live` and `trades`, each starting from Tradier's terms, one person's
+`daily`, `live` (Live's, real time), `live_delayed` (the sandbox's, delayed
+15 minutes) and `trades`, each starting from Tradier's terms, one person's
 use, and entitles the plugins that read prices, trades and quotes. Nothing
 is read from Tradier until a plugin entitled to a dataset asks for a price.
 

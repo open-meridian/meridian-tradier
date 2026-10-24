@@ -103,7 +103,7 @@ def test_a_licensed_dataset_is_said_so(tmp_path: Path) -> None:
     state.licensed = frozenset({"tradier-1:live"})
     use(state)
     served = PageClient(pages).call_tool("read_datasets").data["served"]
-    assert [s["licensed"] for s in served] == [False, True, False]
+    assert [s["licensed"] for s in served] == [False, True, False, False]
 
 
 def test_the_figures_are_the_data_roles_in_its_order(tmp_path: Path) -> None:

@@ -8,7 +8,7 @@ It holds three roles, `data`, `custody` and `connectivity`: the first-use path, 
 
 ## Its datasets
 
-It serves three datasets:
+It serves four datasets, live data one per timeliness:
 
 - **Daily** (`tradier:daily`): each listing's close and daily bar for a
   business date, from Tradier's daily history, consolidated across
@@ -20,7 +20,13 @@ It serves three datasets:
   ask, consolidated from every exchange and real time for a Tradier
   Brokerage account holder. Kept current once a minute while something is
   reading them; the best bid and offer, with its sizes in shares, streamed as
-  it changes, at most once a second.
+  it changes, at most once a second. Recorded while Environment is Live.
+- **Live, delayed** (`tradier:live_delayed`): the same from Tradier's
+  developer sandbox, delayed 15 minutes, as it declares; recorded while
+  Environment is Sandbox, kept current by reading, never streamed.
+
+## Its trades
+
 - **Trades** (`tradier:trades`): each of Tradier's time and sales, streamed
   while something is reading the listing, with what it may count for in a
   day's high, low, open, close and volume where Tradier says. Kept two days
