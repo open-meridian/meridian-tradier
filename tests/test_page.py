@@ -87,7 +87,7 @@ def test_the_datasets_page_and_its_tool_read_one_source(client: PageClient) -> N
     page = client.get(DATASETS, "admin").text
     assert "tradier-1:daily" in page and "tradier-1:live" in page
     assert page.index("<h2>Served</h2>") < page.index("<h2>Wants</h2>")
-    assert page.index("<h2>Subjects</h2>") < page.index("<h2>Kept current</h2>")
+    assert page.index("<h2>Served</h2>") > page.index("Listings kept current: 1 known, 1 streamed")
     data = client.call_tool("read_datasets").data
     daily = next(d for d in data["served"] if d["key"] == "daily")
     assert daily["recorded"] == 1 and daily["arrives"] == "pull, push"
@@ -107,7 +107,7 @@ def test_a_licensed_dataset_is_said_so(tmp_path: Path) -> None:
     state.licensed = frozenset({"tradier-1:live"})
     use(state)
     served = PageClient(pages).call_tool("read_datasets").data["served"]
-    assert [s["licensed"] for s in served] == [False, True, False, False]
+    assert [s["licensed"] for s in served] == [False, True, False, False, False, False]
 
 
 def test_the_figures_are_the_data_roles_in_its_order(tmp_path: Path) -> None:

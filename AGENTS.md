@@ -11,7 +11,7 @@ as for every plugin.
 ## This plugin
 
 - `src/tradier/declaration.py` and `settings.py`: the catalogue (`daily`,
-  `live` and `trades`), the settings in the data role's order
+  `live`, `live_delayed`, `options`, `options_delayed` and `trades`), the settings in the data role's order
   (`environment` first, `live` or `sandbox`, Tradier's developer sandbox,
   delayed and not streamed, `sandbox` by default so Live is a person's
   choice; one token, secret, for either, which the
@@ -34,6 +34,18 @@ as for every plugin.
   answered or declined per subject, standing wants kept current, forming
   days restated under one row key, final closes pushed, subjects and venues
   resolved (W3.1, W3.2, W3.14, W3.15).
+- `src/tradier/chains.py` (from 0.13.0; contract v28, ruling 660): option
+  chains in `options` and `options_delayed`, one per timeliness, apart from
+  the equity datasets. An underlying's series, quotes and statistics through
+  the SDK's `meridian.roles.chains` helpers, under the underlying and keyed
+  by OCC OSI symbol: never resolve, mint or request a series' record (561;
+  RequestSeriesRecords is a reader's). Every expiration Tradier lists is
+  read for a want (a want names no expiration), a standing want kept
+  current at most once a minute within `CALLS_PER_MINUTE`. Greeks are never
+  read (the engine computes its own), nor OCC's files (150).
+- **The edge, for now** (`Lake.at_the_edge`, 0.13.0): the feed delay and
+  the SDK's quality checks over live rows, temporary until the SDK's
+  listings feed takes them over (queued as SDK 0.33.2); remove it then.
 - `src/tradier/stream.py`, `ws.py` and `conditions.py`: Tradier's stream over
   WebSocket (a session made by REST; the standard library's client), its
   reconnect, and what of a time and sale converts to the platform's trade

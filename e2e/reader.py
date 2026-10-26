@@ -100,7 +100,7 @@ class Reader:
 
     def asked(self, query):
         one = lambda name: query.get(name, [""])[0]
-        asked = {"subjects": [ops.SubjectRef(entity_id=s) for s in query.get("subject", [])],
+        asked = {"subjects": [meridian.SubjectRef(entity_id=s) for s in query.get("subject", [])],
                  "sources": SourceChoice(named=query.get("dataset", []))}
         if one("date"):
             asked["business_date"] = one("date")

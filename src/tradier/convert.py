@@ -405,3 +405,137 @@ def streamed(message: Any, raw_key: str) -> list[SourceTrade | SourceQuote]:
         quote = stream_quote(message, raw_key)
         return [quote] if quote is not None else []
     return []
+
+
+# ── Option chains (from 0.13.0; contract v28) ───────────────────────────────
+
+#: Tradier's option symbol: the root, the expiration as yymmdd, C or P, and
+#: the strike times 1,000 in 8 digits -- the OSI symbol with its root unpadded.
+OPTION_SYMBOL = re.compile(
+    r"^(?P<root>[A-Z0-9]{1,6})(?P<day>\d{6})(?P<right>[CP])(?P<strike>\d{8})$"
+)
+#: The rights Tradier names (`option_type`).
+RIGHTS = {"call": "C", "put": "P"}
+
+
+def expirations(fetched: Fetched) -> list[dt.date]:
+    """An underlying's expiration dates as `/markets/options/expirations`
+    lists them, earliest first; none where it lists none (`null`)."""
+    held = fetched.value.get("expirations") if isinstance(fetched.value, dict) else None
+    dates = as_list(held.get("date") if isinstance(held, dict) else None)
+    out: set[dt.date] = set()
+    for each in dates:
+        try:
+            out.add(dt.date.fromisoformat(str(each)))
+        except ValueError:
+            continue
+    return sorted(out)
+
+
+@dataclass(frozen=True)
+class ChainOption:
+    """One series of a chain as Tradier states it: its OSI symbol (the
+    21-character key, root padded to 6), its root, right, strike and
+    expiration, the shares one contract delivers (`contract_size`), its
+    best bid and offer with their sizes in contracts and their times, and its
+    volume and open interest, each None where Tradier states none."""
+
+    osi: str
+    underlying: str
+    root: str
+    right: str
+    strike: Decimal
+    expiration: dt.date
+    contract_size: Decimal | None
+    bid: Decimal | None
+    ask: Decimal | None
+    bid_size: Decimal | None
+    ask_size: Decimal | None
+    at_ns: int | None
+    volume: Decimal | None
+    open_interest: Decimal | None
+    raw_key: str
+    unconverted: tuple[AsReported, ...] = ()
+
+    @property
+    def standard(self) -> bool:
+        """A standard contract: its root is its underlying's symbol and it
+        delivers 100 shares. An adjusted one (a new root after a corporate
+        action) states no deliverable here."""
+        return self.root == self.underlying.replace(".", "") and self.contract_size == 100
+
+
+def _option_side(
+    values: _Values, price: object, size: object, name: str
+) -> tuple[Decimal | None, Decimal | None]:
+    """A side of an option's quote: no price (or 0) is an empty side; its
+    size in contracts, as Tradier states it for an option."""
+    if price is None or exact(price) == 0:
+        return None, None
+    amount = values.number(name, price, positive=True)
+    contracts = values.number(f"{name}size", size, positive=True) if exact(size) != 0 else None
+    return amount, contracts
+
+
+def chain(fetched: Fetched, underlying: str) -> Iterator[ChainOption]:
+    """Every series of `/markets/options/chains`, keyed by its OSI symbol;
+    one whose symbol, right, strike or expiration does not read is left out
+    and counted (`tradier:chains.symbol`)."""
+    held = fetched.value.get("options") if isinstance(fetched.value, dict) else None
+    for item in as_list(held.get("option") if isinstance(held, dict) else None):
+        values = _Values("chains")
+        stated = str(item.get("symbol") or "")
+        found = OPTION_SYMBOL.match(stated)
+        right = RIGHTS.get(str(item.get("option_type") or ""))
+        strike = exact(item.get("strike"))
+        try:
+            expiration = dt.date.fromisoformat(str(item.get("expiration_date")))
+        except ValueError:
+            expiration = None
+        if found is None or right is None or strike is None or strike <= 0 or expiration is None:
+            yield ChainOption(
+                osi="", underlying=underlying, root="", right="", strike=Decimal(0),
+                expiration=dt.date.min, contract_size=None, bid=None, ask=None,
+                bid_size=None, ask_size=None, at_ns=None, volume=None, open_interest=None,
+                raw_key=f"{fetched.raw_key}#{stated}",
+                unconverted=(as_reported(f"{SOURCE}:chains.symbol", stated[:64]),),
+            )  # fmt: skip
+            continue
+        root = found.group("root")
+        osi = f"{root:<6}{found.group('day')}{found.group('right')}{found.group('strike')}"
+        bid, bid_size = _option_side(values, item.get("bid"), item.get("bidsize"), "bid")
+        ask, ask_size = _option_side(values, item.get("ask"), item.get("asksize"), "ask")
+        times = [_ms(item.get(k)) for k in ("bid_date", "ask_date")]
+        stamped = [t for t in times if t is not None]
+        yield ChainOption(
+            osi=osi,
+            underlying=underlying,
+            root=str(item.get("root_symbol") or root),
+            right=right,
+            strike=strike,
+            expiration=expiration,
+            contract_size=values.number("contract_size", item.get("contract_size"), positive=True),
+            bid=bid,
+            ask=ask,
+            bid_size=bid_size,
+            ask_size=ask_size,
+            at_ns=max(stamped) if stamped else None,
+            volume=values.number("volume", item.get("volume")),
+            open_interest=values.number("open_interest", item.get("open_interest")),
+            raw_key=f"{fetched.raw_key}#{stated}",
+            unconverted=tuple(values.unconverted),
+        )
+
+
+def market_days(fetched: Fetched) -> dict[dt.date, bool]:
+    """A month's days as `/markets/calendar` states them: open or not."""
+    held = fetched.value.get("calendar") if isinstance(fetched.value, dict) else None
+    days = held.get("days") if isinstance(held, dict) else None
+    out: dict[dt.date, bool] = {}
+    for item in as_list(days.get("day") if isinstance(days, dict) else None):
+        try:
+            day = dt.date.fromisoformat(str(item.get("date")))
+        except (ValueError, AttributeError):
+            continue
+        out[day] = item.get("status") == "open"
+    return out

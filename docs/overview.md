@@ -8,7 +8,7 @@ It holds three roles, `data`, `custody` and `connectivity`: the first-use path, 
 
 ## Its datasets
 
-It serves four datasets, live data one per timeliness:
+It serves six datasets, live data and option chains one per timeliness:
 
 - **Daily** (`tradier:daily`): each listing's close and daily bar for a
   business date, from Tradier's daily history, consolidated across
@@ -25,6 +25,37 @@ It serves four datasets, live data one per timeliness:
   developer sandbox, delayed 15 minutes, as it declares; recorded while
   Environment is Sandbox, kept current by reading, never streamed.
 
+## Its option chains
+
+- **Options** (`tradier:options`): an underlying's option chain -- each
+  series' terms (right, strike, expiration, multiplier and, for a standard
+  contract, its 100 shares), its best bid and offer with sizes in
+  contracts, its open interest and its volume -- real time for a Tradier
+  Brokerage account holder. Recorded while Environment is Live.
+- **Options, delayed** (`tradier:options_delayed`): the same from Tradier's
+  developer sandbox, delayed 15 minutes, as it declares; recorded while
+  Environment is Sandbox.
+
+## How a chain is read
+
+Each series is named by its OCC symbol under its underlying, never added to
+your instruments: a series gets its own record only when a plugin asks for
+one, for an order, under your deployment's series request rule. A chain is
+read when a plugin asks for an underlying's series, quotes or open
+interest -- every expiration Tradier lists for it -- and, while something
+keeps reading it, kept current, each expiration at most once a minute.
+Chains use at most half of the plugin's calls to Tradier, so with many
+underlyings each is read less often.
+
+## What a chain states
+
+Open interest is the count at the end of the previous market day, as
+Tradier's market calendar has it; volume is the session's, from the open.
+A value Tradier leaves empty is not recorded. The options of a stock or an
+ETF are American and settled in shares; an index's chain (European and
+cash-settled, which Tradier's chain does not say) is not served. Greeks are
+not read: your deployment computes its own. OCC's own files are not read.
+
 ## Its trades
 
 - **Trades** (`tradier:trades`): each of Tradier's time and sales, streamed
@@ -39,7 +70,7 @@ Every price is exact, as Tradier stated it. Every response Tradier sent is
 kept in the plugin's own storage, without your token, so any price can be
 traced to what Tradier said.
 
-It does not serve options or mutual funds, and it does not trade options.
+It does not serve mutual funds, and it does not trade options.
 Tradier does not say which side of a trade took liquidity, so the plugin
 does not either.
 

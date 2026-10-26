@@ -3,7 +3,7 @@ run unchanged against this plugin: every case mapped to the plugin's own convers
 Tradier's recorded exchange and stream, through the lake's half it runs in
 production (lake.py), against the suite's `Recorder`.
 
-Twenty-one cases are not presented, each with why (`NOT_PRESENTED`). Two are about
+Thirty-one cases are not presented, each with why (`NOT_PRESENTED`). Two are about
 kinds of data Tradier's US stock data never publishes (`about`, from
 contract v19): a currency's rate against another currency, and a crypto
 asset's price. Three are about a field its time and sales never state
@@ -29,10 +29,18 @@ reads, trades, of a listing it records (`lake_query`); the plugin itself
 asks the lake nothing. The event group heard and read is the SDK's.
 
 From contract v27, the seven rates cases (`about` rates), which Tradier's
-stock data never publishes, and the feed delay reported (`about` latency,
-until contract v28, ruling 518: recorded, never yet reported). The stream's
-liveness is presented: from open-meridian 0.32.3 the listings feed records
-it for any message heard, a day's summary among them.
+stock data never publishes. The stream's liveness is presented: from
+open-meridian 0.32.3 the listings feed records it for any message heard, a
+day's summary among them.
+
+From contract v28 (0.13.0): the option-chain cases are presented, on SPY's
+synthetic chain wanted of `options` (chains.py); the feed delay
+(required again, ruling 518) on quotes streamed for a standing want, their
+age at the edge recorded and reported; a crossed quote recorded invalid by
+the edge's checks (lake.py). Not presented: the filings slice's cases
+(`about` filings, holdings, corporate actions, ratings), which Tradier's
+market data never publishes, and the duplicate and gap cases (`about`
+quotes): Tradier numbers no quote, streamed or read.
 """
 
 from __future__ import annotations
@@ -46,7 +54,7 @@ from pathlib import Path
 from typing import Any
 
 from meridian.plugin.v1 import operations_pb2 as ops
-from meridian.roles.data.testing import RATES_CASES, lake_query
+from meridian.roles.data.testing import RATES_CASES, feed_delay, lake_query
 from meridian.suites import Recorder, run
 
 from tradier import convert
@@ -72,6 +80,28 @@ AFTER = at("2026-10-10", 9)
 DURING = at("2026-10-09", 15)
 
 Producer = Callable[[Recorder], Awaitable[None]]
+
+#: Contract v28's cases Tradier never presents (ruling 602), each group with
+#: why. Named through this table, not as literal keys, because meridian
+#: 0.1.52's check, which CI pins until the builder moves to 0.1.53, holds
+#: contract v27's suites and refuses a v28 case name it does not know.
+V28_NOT_PRESENTED: tuple[tuple[tuple[str, ...], str], ...] = (
+    (
+        ("a-filing-recorded", "a-fact-restated", "a-fact-confirmed", "resolves-a-filer"),
+        "Tradier's market data publishes no filings",
+    ),
+    (
+        ("a-complete-holdings-report", "a-cusip-used-as-key", "a-stake-crossed"),
+        "Tradier's market data publishes no holdings report",
+    ),
+    (("a-dividend-declared",), "Tradier's market data states no declared dividend"),
+    (("a-rating-action",), "Tradier's market data states no rating"),
+    (
+        ("a-duplicate-is-recorded-suspicious", "rows-after-a-gap-are-suspicious"),
+        "Tradier numbers no quote: its stream's quote events carry no sequence number, and its "
+        "REST quotes are polled",
+    ),
+)
 
 #: The cases Tradier's stock data does not present, and why (above).
 NOT_PRESENTED = {
@@ -104,7 +134,9 @@ NOT_PRESENTED = {
     # Contract v27: the rates slice (about rates), and the feed delay reported
     # (about latency; ruling 518).
     **{case: "Tradier's US stock data publishes no rates" for case in RATES_CASES},
-    "reports-its-feed-delay": "core receives ReportLatency from contract v28, ruling 515",
+    # Contract v28 (ruling 602): the filings slice, and the quality of
+    # numbered quotes (V28_NOT_PRESENTED, below).
+    **{case: why for cases, why in V28_NOT_PRESENTED for case in cases},
 }
 
 #: A moment in the session, for the stream's events: epoch milliseconds.
@@ -201,6 +233,39 @@ def producers(tmp: Path) -> dict[str, Producer]:
             recorder,
             event(type="quote", symbol="SPY", bid="575.45", bidsz=3, ask="575.48", asksz=2),
         )
+
+    async def crossed(recorder: Recorder) -> None:
+        # Contract v28: a quote whose bid is above its ask, judged at the edge.
+        await streamed(
+            recorder,
+            event(type="quote", symbol="SPY", bid="575.50", bidsz=3, ask="575.48", asksz=2),
+        )
+
+    async def delayed(recorder: Recorder, latency: Any) -> None:
+        # Contract v28 (ruling 518): quotes streamed for a standing want, each
+        # one's age at the edge recorded, then reported.
+        held = lake(recorder, DURING)
+        held.latency = latency
+        event_ = want(
+            SPY, dataset="suite-plugin:live", data_type="meridian.v1.Quote", standing=True
+        )
+        recorder.answer("ObservationsWanted", lambda _: event_)
+        await recorder.receive(observations_wanted=held.on_want)
+        await held.heard(
+            convert.streamed(
+                event(type="quote", symbol="SPY", bid="575.45", bidsz=3, ask="575.48", asksz=2),
+                "stream/suite#delay",
+            )
+        )
+        await held.flush(force=True)
+
+    async def chain(recorder: Recorder) -> None:
+        # Contract v28: SPY's chain wanted of `options`, its series, quotes
+        # and open interest recorded under SPY, keyed by OSI symbol.
+        held = lake(recorder)
+        event_ = want(SPY, dataset="suite-plugin:options", data_type="meridian.v1.ListedSeries")
+        recorder.answer("ObservationsWanted", lambda _: event_)
+        await recorder.receive(observations_wanted=held.on_want)
 
     async def alive(recorder: Recorder) -> None:
         # Contract v27 (0.32.3's listings feed): a stream message with no price
@@ -307,6 +372,12 @@ def producers(tmp: Path) -> dict[str, Producer]:
         # Contract v26: one bounded query of a kind the role reads, of a
         # listing it records, as the SDK's data template maps it.
         "queries-the-lake-within-bounds": lake_query(SPY, "trades"),
+        # Contract v28.
+        "reports-its-feed-delay": feed_delay(delayed),
+        "a-crossed-quote-is-recorded-invalid": crossed,
+        "records-a-chains-series": chain,
+        "records-open-interest": chain,
+        "a-chain-row-is-never-resolved": chain,
     }
 
 
@@ -315,7 +386,8 @@ def test_the_data_suite_passes_unchanged(tmp_path: Path) -> None:
     assert report.passed, report.failures
     # Contract v24: and the two cases every suite holds, which the SDK answers.
     # Contract v26: the bounded lake query, and the event group the SDK answers.
-    assert len(report.passed_cases) == 23
+    # Contract v28: the chains, the feed delay and a crossed quote.
+    assert len(report.passed_cases) == 28
     assert report.answered_by_sdk == [
         "hears-and-reads-a-replacement",
         "reads-the-template-catalogue",

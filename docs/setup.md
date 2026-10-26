@@ -33,8 +33,10 @@ Tradier states no currency for any holding or amount. On **Account currency**, a
 
 A deployment admin, on the deployment's **Data sources** page, licenses
 `daily`, `live` (Live's, real time), `live_delayed` (the sandbox's, delayed
-15 minutes) and `trades`, each starting from Tradier's terms, one person's
-use, and entitles the plugins that read prices, trades and quotes. Nothing
+15 minutes), `options` and `options_delayed` (option chains, the same two
+timelinesses, licensed apart from the equity data) and `trades`, each
+starting from Tradier's terms, one person's use, and entitles the plugins
+that read prices, trades, quotes and option chains. Nothing
 is read from Tradier until a plugin entitled to a dataset asks for a price.
 
 ## 4. Link the account

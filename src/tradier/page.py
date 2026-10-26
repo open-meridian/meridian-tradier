@@ -40,7 +40,7 @@ from .convert import NEW_YORK
 from .custody import Syncer
 from .declared import CATALOGUE
 from .kinds import KINDS, Store
-from .lake import DAILY, LIVE, LIVE_DELAYED, PRICE, QUOTE, TRADES, Lake
+from .lake import DAILY, LIVE, LIVE_DELAYED, OPTIONS, OPTIONS_DELAYED, PRICE, QUOTE, TRADES, Lake
 from .records import ConnectionRead, DatasetsRead, FeedRead, Served, SessionRead, Want
 from .settings import SAID, SANDBOX, SANDBOX_SAID, Config
 from .source import TradierSource
@@ -226,8 +226,14 @@ SERVES = {
     DAILY: "closes and daily bars",
     LIVE: "last, bid and ask; quotes",
     LIVE_DELAYED: "last, bid and ask; quotes, delayed 15 minutes",
+    OPTIONS: "option chains: series, quotes, open interest and volume",
+    OPTIONS_DELAYED: "option chains, delayed 15 minutes",
     TRADES: "time and sales",
 }
+#: Each dataset kept per timeliness (ruling 551, 660): its kind, and the
+#: real-time and delayed keys.
+TIMELINESS = {LIVE: (LIVE, LIVE_DELAYED), OPTIONS: (OPTIONS, OPTIONS_DELAYED)}
+KIND_OF = {key: kind for kind, keys in TIMELINESS.items() for key in keys}
 
 
 def _terms(declared: Any) -> str:
@@ -246,20 +252,20 @@ def datasets_read(state: State) -> DatasetsRead:
     delayed = ", delayed" if state.config.on_sandbox else ""
     feed = f"consolidated{delayed}, {asked}" if asked else "consolidated"
     served: list[Served] = []
-    # One dataset per timeliness (ruling 551): the live kind's counts are the
-    # dataset the environment records into now; the other's are none.
-    in_force = LIVE_DELAYED if state.config.on_sandbox else LIVE
+    # One dataset per timeliness (ruling 551; the chains' from 0.13.0, 660):
+    # a kind's counts are the dataset the environment records into now; the
+    # other's are none.
+    sandbox = state.config.on_sandbox
     for declared in CATALOGUE:
-        live_kind = declared.key in (LIVE, LIVE_DELAYED)
+        kind = KIND_OF.get(declared.key)
+        in_force = TIMELINESS[kind][1 if sandbox else 0] if kind else declared.key
         counts = (
-            None
-            if lake is None or (live_kind and declared.key != in_force)
-            else lake.counts[LIVE if live_kind else declared.key]
+            None if lake is None or declared.key != in_force else lake.counts[kind or declared.key]
         )
-        if live_kind and declared.key != in_force:
+        if declared.key != in_force:
             at_vendor = (
                 "No: Live is real time"
-                if declared.key == LIVE_DELAYED
+                if declared.key == TIMELINESS[kind or LIVE][1]
                 else "No: the sandbox's is delayed"
             )
         elif connection.mode == "Sample data":
@@ -318,6 +324,32 @@ def datasets_read(state: State) -> DatasetsRead:
                     want_id=standing.want_id,
                     listings=listings,
                     streamed=on_stream,
+                )
+            )
+        # The chains kept current (from 0.13.0), a want's underlyings each.
+        chained: dict[str, list[str]] = {}
+        for held in lake.chains.underlyings.values():
+            for want_id in sorted(held.standing):
+                chained.setdefault(want_id, []).append(held.symbol)
+        for want_id, symbols in chained.items():
+            read = [
+                at
+                for held in lake.chains.underlyings.values()
+                if want_id in held.standing
+                for at in held.read_at.values()
+            ]
+            answered = lake.by_want.get(want_id, [0, 0])
+            wants.append(
+                Want(
+                    dataset=lake.chains.dataset(),
+                    asked="option chains",
+                    subjects=len(symbols),
+                    recorded=answered[0],
+                    declined=answered[1],
+                    state=f"Kept current, {shown(_when(max(read, default=0)))}",
+                    want_id=want_id,
+                    listings=sorted(symbols),
+                    streamed=False,
                 )
             )
     return DatasetsRead(

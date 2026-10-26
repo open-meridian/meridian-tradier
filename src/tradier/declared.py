@@ -5,8 +5,9 @@ Built from the plugin's code and used twice: `__main__` registers with it,
 and `meridian plugin upload` reads the same one from the built image
 (pyproject.toml's `[tool.meridian] declaration`).
 
-**The catalogue** (contracts v18 and v19), four datasets apart, as the lake
-plan's Q21 and Q40 have a source's daily and live data and its trades:
+**The catalogue** (contracts v18 and v19), six datasets apart, as the lake
+plan's Q21 and Q40 have a source's daily and live data and its trades, and from
+0.13.0 its option chains:
 
 - `daily`: closes and daily bars, from Tradier's daily history, consolidated
   across exchanges; its day New York's, ending at the 16:00 close; pulled
@@ -26,6 +27,15 @@ plan's Q21 and Q40 have a source's daily and live data and its trades:
   delay; recorded only while Environment is Sandbox, as `live` only while it
   is Live. The sandbox streams nothing, so its prices and quotes are kept
   current by reading them.
+- `options` and `options_delayed` (from 0.13.0; contract v28, ruling 660):
+  an underlying's option chain -- each series' terms
+  (`meridian.v1.ListedSeries`), its best bid and offer as a quote keyed by
+  the series, and its open interest and volume (`meridian.v1.Statistic`)
+  -- read for a want and kept current while a standing want stands, each
+  expiration at most once a minute (chains.py). One per timeliness, as the
+  live kind: Live's real time, the sandbox's delayed 15 minutes
+  (`declared_delay_ns`); apart from `live`, so an admin licenses and
+  entitles OPRA's data apart from the equity SIPs'. Not streamed.
 - `trades` (contract v19): each of Tradier's time and sales prints with its
   attributes, streamed for the listings under a standing want, and only
   streamed (lake.py says why); apart from the live prices (the plan's Q40),
@@ -38,9 +48,9 @@ market data goes only to active account holders and is never redistributed
 to anyone without one.
 So each dataset's terms are one person's (`personal_use`), shown and used
 by its holder (`display`, `derived_use`); the daily one kept, the live one
-served and not kept, the trades kept two days (the plan's Q40: a reader that
-lost some catches up from the lake). A summary, not legal advice; the README
-says the same.
+and the chains' served and not kept, the trades kept two days (the plan's
+Q40: a reader that lost some catches up from the lake). A summary, not
+legal advice; the README says the same.
 
 **The storage**, at the edge (decisions/028): Tradier's raw responses, every
 row's raw record, and the product map. The account side keeps three kinds
@@ -56,9 +66,11 @@ from __future__ import annotations
 
 from meridian import DatasetDeclaration, DatasetLicence
 
+from .chains import CADENCE_SECONDS as CHAIN_CADENCE_SECONDS
+from .chains import DATA_TYPES as CHAIN_DATA_TYPES
 from .convert import DAY_END_MINUTE
 from .kinds import KINDS
-from .lake import DAILY, LIVE, LIVE_CADENCE_SECONDS, LIVE_DELAYED, TRADES
+from .lake import DAILY, LIVE, LIVE_CADENCE_SECONDS, LIVE_DELAYED, OPTIONS, OPTIONS_DELAYED, TRADES
 
 VENDOR = "Tradier"
 #: How long a raw response is kept: the reach of a re-conversion.
@@ -113,6 +125,31 @@ CATALOGUE = (
         data_types=["meridian.v1.Price", "meridian.v1.Quote"],
         modes=["pull"],
         cadence=LIVE_CADENCE_SECONDS,
+        licence_default=DatasetLicence(
+            kept=False, derived_use=True, display=True, personal_use=True
+        ),
+        day_time_zone="America/New_York",
+        day_end_minute=DAY_END_MINUTE,
+        declared_delay_ns=SANDBOX_DELAY_NS,
+    ),
+    DatasetDeclaration(
+        key=OPTIONS,
+        vendor=VENDOR,
+        data_types=list(CHAIN_DATA_TYPES),
+        modes=["pull"],
+        cadence=CHAIN_CADENCE_SECONDS,
+        licence_default=DatasetLicence(
+            kept=False, derived_use=True, display=True, personal_use=True
+        ),
+        day_time_zone="America/New_York",
+        day_end_minute=DAY_END_MINUTE,
+    ),
+    DatasetDeclaration(
+        key=OPTIONS_DELAYED,
+        vendor=VENDOR,
+        data_types=list(CHAIN_DATA_TYPES),
+        modes=["pull"],
+        cadence=CHAIN_CADENCE_SECONDS,
         licence_default=DatasetLicence(
             kept=False, derived_use=True, display=True, personal_use=True
         ),
