@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.13.1
+
+- **A decline names a reason the lake takes.** A want of the other
+  timeliness -- `live` on the sandbox or `live_delayed` on Live, and
+  likewise `options` / `options_delayed` -- is declined `not_covered`
+  (the environment does not serve it), where 0.12.0 and 0.13.0 declined it
+  `not_entitled`. DeclineWant takes `not_covered`, `source_silent` or
+  `beyond_history` alone, so the lake refused every such decline; the
+  refusal, raised in the want's handler, ended the SDK's delivery stream
+  (logged as "a read to catch up failed ... trying again"), and the wants
+  delivered behind it in that stream were never heard. On a deployment
+  where a reader is entitled to `live` while Tradier runs on its sandbox,
+  that happened at every read.
+- The tests' `Recorder` refuses a decline the lake refuses
+  (tests/conftest.py), since the SDK's answers any reason.
+
 ## 0.13.0
 
 On open-meridian 0.33.1, contract v28 (meridian-design `plans/the-v28-build.md`;

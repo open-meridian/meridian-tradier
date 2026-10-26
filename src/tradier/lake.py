@@ -14,9 +14,15 @@ minutes, so they are two datasets, `live` and `live_delayed`, each with its
 declared delay. The feed records the live kind into whichever the
 environment provides (`delayed`, set from the settings): the SDK's feed
 works by its `live` key, and this module names the dataset it is in now.
-A want for the other is declined, not entitled: this environment does not
+A want for the other is declined, not covered: this environment does not
 serve it. Daily closes are end of day in both, and the sandbox streams no
 trades, so `daily` and `trades` stay one each.
+
+**A decline names a reason the lake takes** (0.13.1): DeclineWant takes
+`not_covered`, `source_silent` or `beyond_history` and nothing else; the
+lake refuses any other, and a refusal raised in a want's handler ends the
+SDK's delivery stream, the wants behind it lost. 0.12.0 to 0.13.0 declined
+the other timeliness `not_entitled`, which the lake refused every time.
 
 **Option chains** (from 0.13.0; contract v28, ruling 660): a want of the
 `options` or `options_delayed` dataset is chains.py's, its series, quotes
@@ -168,14 +174,15 @@ class Lake(listings.Feed):
 
     async def on_want(self, heard: Any) -> None:
         """A want of the live kind's other timeliness is declined, not
-        entitled; any other is the SDK's to answer."""
+        covered (this environment does not serve it); any other is the
+        SDK's to answer."""
         want: ops.ObservationsWantedEvent = heard.message
         if self._key_of(want.dataset) == OPTIONS:
             await self.chains.on_want(want)
             return
         if self._key_of(want.dataset) == LIVE and want.dataset != self.dataset(LIVE):
             subjects = [s.entity_id for s in want.subjects]
-            await self._decline(LIVE, want.want_id, subjects, "not_entitled", settled=False)
+            await self._decline(LIVE, want.want_id, subjects, "not_covered", settled=False)
             return
         await super().on_want(heard)
 
