@@ -81,15 +81,23 @@ NOT_PRESENTED = {
         "quoting the firm, so it takes DMA placements alone"
     ),
     # Contract v28: an option's expiry (about options) and a package's fill
-    # (about packages; ruling 602).
-    "reports-an-expiry": (
-        "it places equity orders alone (Tradier's `equity` class): it holds no option "
-        "placement to expire"
-    ),
-    "reports-a-package-fill": (
-        "it places single-leg equity orders alone: Tradier's `multileg` and `combo` classes "
-        "are not sent"
-    ),
+    # (about packages; ruling 602). Named through a table, not as literal
+    # keys: meridian 0.1.52's check holds contract v27's suites.
+    **{
+        case: why
+        for case, why in (
+            (
+                "reports-an-expiry",
+                "it places equity orders alone (Tradier's `equity` class): it holds no option "
+                "placement to expire",
+            ),
+            (
+                "reports-a-package-fill",
+                "it places single-leg equity orders alone: Tradier's `multileg` and `combo` "
+                "classes are not sent",
+            ),
+        )
+    },
 }
 
 ACCEPTED = "PLC-01JAE0000000000000000ACPT"

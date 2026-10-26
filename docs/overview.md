@@ -36,6 +36,8 @@ It serves six datasets, live data and option chains one per timeliness:
   developer sandbox, delayed 15 minutes, as it declares; recorded while
   Environment is Sandbox.
 
+## How a chain is read
+
 Each series is named by its OCC symbol under its underlying, never added to
 your instruments: a series gets its own record only when a plugin asks for
 one, for an order, under your deployment's series request rule. A chain is
@@ -44,6 +46,8 @@ interest -- every expiration Tradier lists for it -- and, while something
 keeps reading it, kept current, each expiration at most once a minute.
 Chains use at most half of the plugin's calls to Tradier, so with many
 underlyings each is read less often.
+
+## What a chain states
 
 Open interest is the count at the end of the previous market day, as
 Tradier's market calendar has it; volume is the session's, from the open.
