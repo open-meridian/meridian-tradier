@@ -133,6 +133,39 @@ def want(
     )
 
 
+#: The reasons the lake's DeclineWant takes (meridian.v1.DeclineWantRequest.reason;
+#: core's lake refuses any other as a handler error).
+DECLINE_REASONS = frozenset(
+    {
+        ops.UNANSWERED_REASON_NOT_COVERED,
+        ops.UNANSWERED_REASON_SOURCE_SILENT,
+        ops.UNANSWERED_REASON_BEYOND_HISTORY,
+    }
+)
+
+
+@pytest.fixture(autouse=True)
+def declines_the_lake_takes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every test's Recorder refuses a decline the lake refuses, as the lake
+    does: the SDK's Recorder answers any reason (0.13.1; a `not_entitled`
+    decline passed every test and was refused on a deployment each time)."""
+    from meridian.errors import CallFailed
+
+    ordinary = Recorder._operate
+
+    async def operate(self: Recorder, method: Any, params: Any) -> Any:
+        if str(method) == "DeclineWant" and params.reason not in DECLINE_REASONS:
+            reason = ops.UnansweredReason.Name(params.reason)
+            raise CallFailed(
+                "DeclineWant",
+                "handler error",
+                f"reason {reason}: not_covered, source_silent or beyond_history",
+            )
+        return await ordinary(self, method, params)
+
+    monkeypatch.setattr(Recorder, "_operate", operate)
+
+
 @pytest.fixture
 def restore_parse() -> Any:
     import tradier.vendor as vendor

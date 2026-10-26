@@ -227,13 +227,13 @@ def test_a_past_date_is_beyond_the_chains_history(tmp_path: Path) -> None:
     )
 
 
-def test_the_other_timeliness_is_not_entitled(tmp_path: Path) -> None:
+def test_the_other_timeliness_is_not_covered(tmp_path: Path) -> None:
     recorder = Recorder(INSTANCE)
     lake = lake_at(recorder, SATURDAY, tmp_path, delayed=True)
     hear(recorder, lake, chain_want(SPY))
     (declined,) = recorder.on("DeclineWant")
     assert (
-        declined.reason == ops.UNANSWERED_REASON_NOT_ENTITLED and recorder.on("RecordSeries") == []
+        declined.reason == ops.UNANSWERED_REASON_NOT_COVERED and recorder.on("RecordSeries") == []
     )
     recorder = Recorder(INSTANCE)
     lake = lake_at(recorder, SATURDAY, tmp_path / "2", delayed=True)

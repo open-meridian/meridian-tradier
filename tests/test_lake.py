@@ -353,8 +353,9 @@ async def test_a_listing_that_does_not_resolve_is_reported_and_not_kept(tmp_path
 async def test_the_sandboxs_live_data_is_recorded_as_live_delayed(tmp_path: Path) -> None:
     """One dataset per timeliness (ruling 551): on the sandbox the live
     kind's rows are `live_delayed`'s, a want of it answered; a want of `live`,
-    real time, is declined not entitled; back on Live, the delayed dataset's
-    standing wants are let go and the live kind is `live`'s again."""
+    real time, is declined not covered (a reason the lake takes); back on
+    Live, the delayed dataset's standing wants are let go and the live kind
+    is `live`'s again."""
     recorder, lake, _ = made(tmp_path)
     lake.use_delayed(True)
     delayed = want(SPY, dataset="tradier-1:live_delayed", standing=True, want_id="WNT-D")
@@ -368,7 +369,7 @@ async def test_the_sandboxs_live_data_is_recorded_as_live_delayed(tmp_path: Path
     await recorder.receive(observations_wanted=lake.on_want)
     (declined,) = on(recorder, "DeclineWant")
     assert declined.want_id == "WNT-R"
-    assert declined.reason == ops.UNANSWERED_REASON_NOT_ENTITLED
+    assert declined.reason == ops.UNANSWERED_REASON_NOT_COVERED
     assert len(prices(recorder)) == len(rows)
     lake.use_delayed(False)
     assert "WNT-D" not in lake.standing

@@ -9,7 +9,8 @@ sandbox, delayed 15 minutes; each holds a chain's series
 (`meridian.v1.Statistic`), licensed and entitled apart from the equity
 datasets (OPRA's data, not the equity SIPs'). The chain is recorded into
 whichever the environment provides, as the live kind is (lake.py); a want
-of the other is declined, not entitled.
+of the other is declined, not covered (0.13.1: DeclineWant takes no
+`not_entitled`, lake.py).
 
 **Never minted, never resolved** (ruling 561, W10.4): every row names the
 underlying's record as its subject and the series by its OCC OSI symbol
@@ -168,7 +169,7 @@ class Chains:
         subjects = [s.entity_id for s in want.subjects]
         self.counts.wants += 1
         if want.dataset != self.dataset():
-            await self.decline(want.want_id, subjects, "not_entitled", settled=False)
+            await self.decline(want.want_id, subjects, "not_covered", settled=False)
             return
         if want.data_type not in DATA_TYPES:
             await self.decline(want.want_id, subjects, "not_covered", settled=False)
