@@ -86,7 +86,10 @@ SANDBOX_DELAY_NS = 15 * 60 * 1_000_000_000
 #: platform on 2026-10-14 (the v24 plan's O10): the daily dataset's business
 #: dates are the days it says US equity markets are open, so the lake flags a
 #: close dated on a closed day (contract v24's `calendar_id`, which waited for
-#: this plugin's move off the v23 pins).
+#: this plugin's move off the v23 pins). From 0.13.2 (ruling 768) the option
+#: chains' datasets name it too: their open interest and volume are dated by
+#: it, and the engine looks to it for a series' sessions where a quote names
+#: no venue (ruling 570 (i)).
 US_EQUITY_CALENDAR = "CAL-01M4VF0F4XGP3RATCCSKDPZSBP"
 
 CATALOGUE = (
@@ -143,6 +146,7 @@ CATALOGUE = (
         ),
         day_time_zone="America/New_York",
         day_end_minute=DAY_END_MINUTE,
+        calendar_id=US_EQUITY_CALENDAR,
     ),
     DatasetDeclaration(
         key=OPTIONS_DELAYED,
@@ -155,6 +159,7 @@ CATALOGUE = (
         ),
         day_time_zone="America/New_York",
         day_end_minute=DAY_END_MINUTE,
+        calendar_id=US_EQUITY_CALENDAR,
         declared_delay_ns=SANDBOX_DELAY_NS,
     ),
     DatasetDeclaration(

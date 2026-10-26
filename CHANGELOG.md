@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.13.2
+
+- **The option chains' datasets name their calendar** (ruling 768):
+  `options` and `options_delayed` declare `calendar_id`
+  `CAL-01M4VF0F4XGP3RATCCSKDPZSBP`, the platform's US equity and options
+  holiday calendar `daily` already declares. Their rows' closed days are
+  known to the lake, and the analytics engine places a series whose quote
+  names no venue by the dataset's declaration (core's ruling 767).
+
 ## 0.13.1
 
 - **A decline names a reason the lake takes.** A want of the other
