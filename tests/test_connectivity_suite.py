@@ -15,10 +15,12 @@ fill's place of execution, compliance waits, and from contract v23 a bust
 fill (`about: charges without a fill`), a charge re-reported on an accepted
 placement (`about: venue-originated fills`; Tradier's orders carry no fee)
 and a value-date roll; from contract v27 a dealer's quote on an RFQ
-placement (`about: rfqs`; Tradier takes no request for quote) and the
-session's round trip reported (`about: latency`, until contract v28, ruling
-518: the Trader records it, and sends no ReportLatency yet). Every other
-case passes, among them v23's fills of
+placement (`about: rfqs`; Tradier takes no request for quote); and from
+contract v28 an option's expiry (`about: options`) and a package's fill
+(`about: packages`): it places single-leg equity orders alone. The
+session's round trip is reported (required again from contract v28, ruling
+518): the Trader records each call's, and `Latency.report` sends it. Every
+other case passes, among them v23's fills of
 orders placed in Tradier's own web app, reported on no placement, and a
 later fill on the placement an accept created.
 """
@@ -73,13 +75,21 @@ NOT_PRESENTED = {
         "Tradier's trades settle on their settlement dates: it rolls no spot position at a "
         "daily cut"
     ),
-    # Contract v27: an RFQ's dealers' quotes (about rfqs), and the session's
-    # round trip reported (about latency; ruling 518).
+    # Contract v27: an RFQ's dealers' quotes (about rfqs).
     "records-a-dealers-quote-on-an-rfq-placement": (
         "Tradier takes no request for quote: its equities are routed to the market, no dealer "
         "quoting the firm, so it takes DMA placements alone"
     ),
-    "reports-a-sessions-round-trip": "core receives ReportLatency from contract v28, ruling 515",
+    # Contract v28: an option's expiry (about options) and a package's fill
+    # (about packages; ruling 602).
+    "reports-an-expiry": (
+        "it places equity orders alone (Tradier's `equity` class): it holds no option "
+        "placement to expire"
+    ),
+    "reports-a-package-fill": (
+        "it places single-leg equity orders alone: Tradier's `multileg` and `combo` classes "
+        "are not sent"
+    ),
 }
 
 ACCEPTED = "PLC-01JAE0000000000000000ACPT"
@@ -221,6 +231,17 @@ async def accepted_then_filled(recorder: Recorder) -> None:
     await rig.poll()
 
 
+async def round_trip(recorder: Recorder) -> None:
+    """Contract v28 (ruling 518): the brokerage API's session latency, each
+    call's round trip as the Trader records it, reported."""
+    rig = Rig(recorder)
+    held = placement()
+    rig.holds(held)
+    await rig.hear(held)
+    await rig.poll()
+    await rig.latency.report()
+
+
 PRODUCERS: dict[str, Producer] = {
     "acknowledges-a-placement-naming-it": acknowledged,
     "hears-no-placement-of-another-instance": another_instances,
@@ -244,6 +265,7 @@ PRODUCERS: dict[str, Producer] = {
     "reports-a-symbol-it-cannot-resolve": renamed,
     "reports-a-fill-on-no-placement": originated,
     "reports-a-later-fill-on-the-accepted-placement": accepted_then_filled,
+    "reports-a-sessions-round-trip": round_trip,
 }
 
 

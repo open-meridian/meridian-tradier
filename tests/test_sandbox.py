@@ -213,6 +213,9 @@ def test_on_it_asks_the_sandbox_marks_data_delayed_and_opens_no_stream(tmp_path:
         "daily": "Yes, delayed 15 minutes",
         "live": "No: the sandbox's is delayed",
         "live_delayed": "Yes, delayed 15 minutes",
+        # The chains' (0.13.0, ruling 660), one per timeliness as the live kind.
+        "options": "No: the sandbox's is delayed",
+        "options_delayed": "Yes, delayed 15 minutes",
         "trades": "No: the sandbox does not stream",
     }
     assert datasets["streamed"] == 0 and not any(w["streamed"] for w in datasets["wants"])
@@ -248,6 +251,8 @@ def test_off_it_asks_tradier_in_real_time_and_streams(tmp_path: Path) -> None:
         "daily": "Yes",
         "live": "Yes",
         "live_delayed": "No: Live is real time",
+        "options": "Yes",
+        "options_delayed": "No: Live is real time",
         "trades": "Yes",
     }
     assert datasets["streamed"] == 1

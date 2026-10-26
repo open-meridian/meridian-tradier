@@ -1,21 +1,14 @@
 {#- Datasets, at admin: the data role's (meridian/roles/data/datasets.html),
     with Tradier's nuance at its blocks only -- a line on the terms, the feed
     and host each dataset reads as a column of "Served", how many standing
-    wants there are past the latest few drawn, and what it keeps current. No
-    prices, trades or quotes: those are the reading roles'. -#}
+    wants there are past the latest few drawn, and what it keeps current
+    (from 0.13.0 a clause of the line, not a panel of its own, so six
+    datasets still fit one screen at 1280). No prices, trades or quotes:
+    those are the reading roles'. -#}
 {% extends "meridian/roles/data/datasets.html" %}
-{% import "meridian/roles/_rows.html" as om %}
 {% block vendor_notices %}
-<p class="muted"><span class="wide-only">Daily: New York's day to 16:00; live: last, bid, ask, quotes; trades streamed, a restart's gap not caught up.</span>{% if wants > data.wants|length %} The latest {{ data.wants|length }} of {{ wants }} standing wants are shown.{% endif %}</p>
+<p class="muted"><span class="wide-only">Daily: New York's day to 16:00; live: last, bid, ask, quotes; options: chains, each expiration at most once a minute; trades streamed, a restart's gap not caught up. Listings kept current: {{ data.listings }} known, {{ data.streamed }} streamed{% if data.forming %}, {{ data.forming }} days still forming{% endif %}.</span>{% if wants > data.wants|length %} The latest {{ data.wants|length }} of {{ wants }} standing wants are shown.{% endif %}</p>
 {% endblock %}
 {% block vendor_columns %}
 {% if row is none %}<th class="wide-only">Feed</th>{% else %}<td class="wide-only">{{ row.feed }}</td>{% endif %}
-{% endblock %}
-{% block vendor_sections %}
-<section class="panel wide-only">
-<h2>Kept current</h2>
-<table class="one-line"><tbody>
-{{ om.row("Listings", data.listings ~ " known, " ~ data.streamed ~ " streamed", (data.forming ~ " days still forming") if data.forming else "") }}
-</tbody></table>
-</section>
 {% endblock %}

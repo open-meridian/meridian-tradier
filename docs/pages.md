@@ -55,11 +55,14 @@ not Demo.
   recorded; the feed and host each reads (Tradier's column).
 - **Wants:** the standing wants it keeps current, the latest first: of
   which dataset, asking what, for how many subjects, what each was answered
-  with, and whether its listings are streamed. With none, "No wants yet".
+  with, and whether its listings are streamed; an option chain's (`options`
+  or `options_delayed`), its underlyings and when it was last read. With
+  none, "No wants yet".
 - **Subjects:** whether the deployment lets the plugin read an instrument's
   record.
-- **Kept current** (Tradier's): how many listings it knows and streams, and
-  days still forming. A restart's or a reconnect's gap is not caught up.
+- **Listings kept current** (Tradier's, in the line above Served): how
+  many listings it knows and streams, and days still forming. A restart's
+  or a reconnect's gap is not caught up.
 
 ## Account links
 

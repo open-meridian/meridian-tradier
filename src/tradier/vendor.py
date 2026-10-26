@@ -4,10 +4,14 @@ REST at api.tradier.com/v1 (or its developer sandbox, sandbox.tradier.com/v1,
 delayed 15 minutes and with no stream, with the `sandbox` setting or `make
 live SANDBOX=1`): `/markets/history` (one symbol's
 daily bars over a range), `/markets/quotes` (many symbols' last trade and
-best bid and ask) and, to stream, `/markets/events/session` (a session for
-the WebSocket at `STREAM`, which stream.py speaks). Market data for a
-Tradier Brokerage account holder is real time and consolidated from every
-exchange.
+best bid and ask), from 0.13.0 `/markets/options/expirations` (an
+underlying's expiration dates, every root), `/markets/options/chains` (one
+expiration's series, each with its quote, volume and open interest; greeks
+never asked: the engine computes its own) and `/markets/calendar` (a month's
+market days, which date a chain's open interest) and, to stream,
+`/markets/events/session` (a session for the WebSocket at `STREAM`, which
+stream.py speaks). Market data for a Tradier Brokerage account holder is
+real time and consolidated from every exchange.
 
 **The token.** Tradier's bearer token, from `settings.Credentials`, added to
 the request and to nothing else: a raw record keeps the request's other
@@ -309,6 +313,27 @@ class Tradier:
     def quotes(self, symbols: Sequence[str]) -> Fetched:
         params = {"symbols": ",".join(symbols), "greeks": "false"}
         return self.get("quotes", "quotes", "/markets/quotes", params)
+
+    def expirations(self, symbol: str) -> Fetched:
+        """An underlying's expiration dates, every root's (an adjusted
+        series' root among them), in Tradier's spelling of the symbol."""
+        params = {"symbol": symbol, "includeAllRoots": "true", "strikes": "false"}
+        return self.get(
+            "expirations", f"expirations/{symbol}", "/markets/options/expirations", params
+        )
+
+    def chain(self, symbol: str, expiration: str) -> Fetched:
+        """One expiration's series of an underlying, each with its quote,
+        volume and open interest; no greeks (the engine computes its own)."""
+        params = {"symbol": symbol, "expiration": expiration, "greeks": "false"}
+        return self.get(
+            "chains", f"chains/{symbol}/{expiration}", "/markets/options/chains", params
+        )
+
+    def calendar(self, year: int, month: int) -> Fetched:
+        """A month's market days, each `open` or `closed`."""
+        params = {"month": f"{month:02d}", "year": str(year)}
+        return self.get("calendar", f"calendar/{year}-{month:02d}", "/markets/calendar", params)
 
     def session(self) -> str:
         """A streaming session's ID, valid five minutes until a stream

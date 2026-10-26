@@ -1,5 +1,59 @@
 # Changelog
 
+## 0.13.0
+
+On open-meridian 0.33.1, contract v28 (meridian-design `plans/the-v28-build.md`;
+spec/the-options-and-event-contracts-sample-plugin T1), on core v28's
+harness.
+
+- **Option chains** (rulings 145 to 152, 561, 567; datasets ruled 660):
+  two new datasets, `options` (Live's, real time) and `options_delayed`
+  (the sandbox's, a declared 15-minute delay), one per timeliness as the
+  live kind, licensed and entitled apart from `live` (OPRA's data, not the
+  equity SIPs'), served and not kept by default as `live` is. Each holds an
+  underlying's series (`meridian.v1.ListedSeries`, the platform's
+  `TPL-listed-option` template, version 1), its quotes and its statistics
+  (`meridian.v1.Statistic`), every row under the underlying's record and
+  keyed by the series' OCC OSI symbol (`occ_osi`), never resolved or
+  minted (`meridian.roles.chains`; chains.py).
+  - Read from Tradier's `/markets/options/expirations` (every root) and
+    `/markets/options/chains` (one expiration a call, no greeks: the engine
+    computes its own); quotes' sizes in contracts; open interest dated the
+    previous market day by `/markets/calendar`, volume today's once the
+    session opens; a value Tradier leaves `null` records no row. A standard
+    contract delivers 100 shares; an adjusted root states no deliverable.
+    An index's chain (European, cash-settled, which Tradier does not state)
+    is declined, not covered. OCC's files are not read (150).
+  - Bounded by wants (152): a want of an underlying's series, quotes or
+    statistics reads every expiration Tradier lists; a standing want keeps
+    each at most once a minute, within 30 chain calls a minute (half the
+    client's 60), only changes sent again.
+  - Datasets lists the chains' standing wants.
+- **The edge** (contract v28, rulings 424 and 518): each live price, quote
+  and trade, and each chain quote, recorded unasked or for a standing want
+  has its feed delay recorded and is judged by the SDK's quality checks;
+  the plugin's `roles.Latency` -- the brokerage session's round trip too --
+  is reported every 10 seconds (`ReportLatency`). **Temporary**: the SDK's
+  listings feed does neither in 0.33.1, so `Lake.at_the_edge` does it with
+  the SDK's own `Latency.aged` and `quality.EdgeChecks` until the SDK's
+  listings feed takes it over (queued as SDK 0.33.2). A chain's quotes are
+  judged series by series, since the checks remember a subject's last row
+  and every series names its underlying.
+- **The suites' v28 cases:** data -- the three option-chain cases,
+  `reports-its-feed-delay` and `a-crossed-quote-is-recorded-invalid`
+  presented; the filings slice's not (Tradier publishes none), nor the
+  duplicate and gap cases (Tradier numbers no quote). Connectivity --
+  `reports-a-sessions-round-trip` presented; `reports-an-expiry` and
+  `reports-a-package-fill` not (it places single-leg equity orders).
+  Custody -- `reports-an-assignment` not (Tradier's history names no
+  option event).
+- **`meridian plugin migrate`** (to_0_33_0): e2e/reader.py's SubjectRefs
+  are `meridian.SubjectRef` (ruling 599).
+- **The pins:** open-meridian 0.33.1 and plugin-python:0.33.1 by tag and
+  digest; core v28's runtime and harness at `8def82a` (chart 0.1.313) by
+  digest; `meridian` stays 0.1.52 in check.yaml.
+- The README's "Not released" line is gone (549).
+
 ## 0.12.0
 
 On open-meridian 0.32.3, contract 27.

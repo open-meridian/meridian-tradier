@@ -10,10 +10,11 @@ places orders at Tradier's instance; `tradier`, this one; and `reader`
 (e2e/reader.py), a stand-in for
 whatever reads prices, from the same image.
 
-1. The catalogue: the three datasets listed by `dashboard__list_datasets`,
+1. The catalogue: the datasets listed by `dashboard__list_datasets`,
    as the plugin declared them -- daily pulled and pushed, its day New
    York's to 16:00; live pulled and streamed; trades streamed,
-   kept two days -- each with Tradier's terms, one person's, as its default
+   kept two days; from 0.13.0 the chains' two, pulled and served, not
+   kept -- each with Tradier's terms, one person's, as its default
    licence.
 2. Licensed and entitled: the deployment admin licenses the three, and
    entitles the reader to them, the broker reloaded with each.
@@ -86,6 +87,8 @@ COMPOSE = ["docker", "compose", "-p", NAME, "-f", ".e2e/harness/compose.yaml",
            "-f", ".e2e/harness/plugins.yaml", "-f", "e2e/plugin.yaml"]
 DAY = "2026-10-08"
 DAILY, LIVE, TRADES = "tradier:daily", "tradier:live", "tradier:trades"
+#: The option chains' datasets (0.13.0, ruling 660), one per timeliness.
+OPTIONS, OPTIONS_DELAYED = "tradier:options", "tradier:options_delayed"
 MINUTE_NS = 60 * 10**9
 COMPOSE += ["-f", "e2e/recorded.yaml"] if RECORDED else []
 
@@ -184,8 +187,8 @@ def run():
     # 1. The catalogue.
     def listed():
         held = {d["dataset"]: d for d in call("dashboard__list_datasets", {}, "unchanged")["data"]["datasets"]}
-        return held if {DAILY, LIVE, TRADES} <= set(held) else None
-    held = until(90, listed, "step 1, the three datasets were not listed")
+        return held if {DAILY, LIVE, TRADES, OPTIONS, OPTIONS_DELAYED} <= set(held) else None
+    held = until(90, listed, "step 1, the datasets were not listed")
     daily, live = held[DAILY]["catalogue_entry"], held[LIVE]["catalogue_entry"]
     trades_entry = held[TRADES]["catalogue_entry"]
     must(daily["modes"] == ["pull", "push"] and live["modes"] == ["pull", "stream"]
@@ -194,6 +197,11 @@ def run():
     must(trades_entry["licence_default"]["kept"] is True
          and trades_entry["licence_default"]["retention_days"] == 2,
          f"step 1, trades kept two days by default: {trades_entry['licence_default']}")
+    # The chains' (0.13.0): pulled, served and not kept by default.
+    options, delayed = held[OPTIONS]["catalogue_entry"], held[OPTIONS_DELAYED]["catalogue_entry"]
+    must(options["modes"] == ["pull"] and delayed["modes"] == ["pull"]
+         and options["licence_default"]["kept"] is False,
+         f"step 1, the chains' datasets: {options}, {delayed}")
     must(daily["day_time_zone"] == "America/New_York" and daily["day_end_minute"] == 960,
          f"step 1, the declared day: {daily}")
     must(daily["licence_default"]["personal_use"] is True and daily["licence_default"]["kept"] is True

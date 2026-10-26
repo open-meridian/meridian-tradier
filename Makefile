@@ -38,9 +38,9 @@ CLI_CONTEXT := $(if $(MERIDIAN_BIN),--build-context cli=$(MERIDIAN_BIN),)
 # 0.1.303.
 # Moved together by a deliberate commit, and with the SDK when a contract version
 # changes. e2e-latest.yaml tries the runtime and harness tagged latest weekly.
-# Core a5da59a (main 6d346b3, the same tree), contract v27, as published with chart 0.1.310.
-RUNTIME_IMAGE ?= ghcr.io/open-meridian/meridian-runtime:a5da59a@sha256:05694f1ca4d642def4e2572c78a56c3ce3c43d060f4bac2983e19283e98910de
-HARNESS_IMAGE ?= ghcr.io/open-meridian/meridian-harness:a5da59a@sha256:74a1e5f08308e26571141b24548082280fed8519976c08b32cd8a4b34fc8e08c
+# Core 8def82a (merged as bcd96cb), contract v28, as published with chart 0.1.313.
+RUNTIME_IMAGE ?= ghcr.io/open-meridian/meridian-runtime:8def82a@sha256:f0565be718b588bb96fabf52a5b16a60500db985b44f480edb73b8005d8e931f
+HARNESS_IMAGE ?= ghcr.io/open-meridian/meridian-harness:8def82a@sha256:763b1d04466df14ef41e17497133a4e292f30df1631494a4cc36cff03326deff
 # Tradier's sandbox for `make live` (SANDBOX=1), with a developer sandbox
 # token: its data is delayed 15 minutes.
 SANDBOX     ?=

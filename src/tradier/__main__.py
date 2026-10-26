@@ -12,7 +12,8 @@ datasets a deployment admin has licensed (contract v20), and reports the data
 role's figures; then it hears what the lake wants of it and records against
 each want or declines it per subject (lake.py), and keeps its timetable:
 standing wants kept current, days still forming read again, a final close
-pushed. While any standing want stands, it streams Tradier's time and sales
+pushed; and from 0.13.0 the option chains wanted, each expiration read and
+kept current (chains.py). While any standing want stands, it streams Tradier's time and sales
 and quotes for the listings wanted (stream.py), reconnecting with a new
 session when the stream breaks; on the sandbox, which does not stream, it
 opens none, and keeps live prices current as it does without a stream. A
@@ -342,9 +343,12 @@ async def run() -> None:
             ", ".join(sorted(roles)) or "none",
         )
         lake = Lake(plugin, None, Products(granted / "products.json" if granted else None))
-        # The sessions' latency (contract v27): recorded for Connection's
-        # Sessions, not yet reported (core receives ReportLatency from v28).
-        state = State(lake=lake, store=kinds, latency=Latency(plugin))
+        # The sessions' latency (contract v27), shown on Connection's
+        # Sessions; and from 0.13.0 (contract v28, rulings 515 and 518) each
+        # live row's age at the edge too, all reported every 10 seconds.
+        latency = Latency(plugin)
+        state = State(lake=lake, store=kinds, latency=latency)
+        lake.latency = latency
         streamer = Streamer(lambda: feed_for(state, store), lake.heard, lake.flush)
         lake.streamer = state.streamer = streamer
         account = Account(kinds, granted)
@@ -422,6 +426,8 @@ async def run() -> None:
                 asyncio.create_task(again(lambda: timetable(plugin, state, lake), "the timetable"))
             )
             tasks.append(asyncio.create_task(again(streamer.run, "the stream")))
+        # Contract v28: the latency recorded, reported (ReportLatency).
+        tasks.append(asyncio.create_task(again(latency.run, "the latency reports")))
         log.info("serving its pages on 127.0.0.1:%d", port)
         await stopped.wait()
         log.info("stopping")

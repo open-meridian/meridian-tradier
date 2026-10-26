@@ -344,6 +344,11 @@ NOT_PRESENTED = {
         "asks the date read for each fill's settlement date (ComputeDate); it reads no "
         "calendar's days"
     ),
+    # Contract v28 (about options; ruling 602).
+    "reports-an-assignment": (
+        "Tradier's history states an option's assignment, exercise or expiry as an `option` "
+        "entry naming no event, which it reports as not known: it reports no assignment"
+    ),
 }
 
 HELD = [position("AAPL", "12.5")]

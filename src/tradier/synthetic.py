@@ -7,7 +7,9 @@ every value invented (the lake plan's Q11: real responses stay in a
 developer's own storage, never committed): daily history for SPY, BRK/B (as
 Tradier spells it) and TQQQ over 2026-10-05 to 2026-10-09, TQQQ's last close
 with eighteen decimal places, and the quotes of SPY and BRK/B, BRK/B's bid
-side empty, sizes in hundreds. Its numbers are text in the file and go out
+side empty, sizes in hundreds; from 0.13.0 SPY's option expirations and
+their chains (`options`), and a month's market days, every weekday open.
+Its numbers are text in the file and go out
 as JSON numbers, exactly as written, as Tradier sends them; and, as Tradier
 does, a list of one goes out as the one object, none as `null`, and a symbol
 it does not know under `unmatched_symbols`.
@@ -33,7 +35,12 @@ from .raw import RawStore, StreamLog
 from .vendor import Response
 
 #: The fields Tradier sends as text, never as numbers.
-TEXT_FIELDS = frozenset({"symbol", "description", "exch", "type", "bidexch", "askexch", "date"})
+TEXT_FIELDS = frozenset(
+    {
+        "symbol", "description", "exch", "type", "bidexch", "askexch", "date", "underlying",
+        "expiration_date", "expiration_type", "option_type", "root_symbol", "status",
+    }
+)  # fmt: skip
 
 
 def exchange(path: Path | None = None) -> dict[str, Any]:
@@ -71,8 +78,10 @@ def _one_or_many(items: list[Any]) -> Any:
 
 
 class SyntheticTransport:
-    """vendor.Transport on the built-in exchange: `/markets/history` and
-    `/markets/quotes`, on either Tradier's host or its sandbox."""
+    """vendor.Transport on the built-in exchange: `/markets/history`,
+    `/markets/quotes`, and from 0.13.0 `/markets/options/expirations`,
+    `/markets/options/chains` and `/markets/calendar`, on either Tradier's
+    host or its sandbox."""
 
     def __init__(self, held: Mapping[str, Any] | None = None) -> None:
         self.held = held if held is not None else exchange()
@@ -100,11 +109,36 @@ class SyntheticTransport:
             if unmatched:
                 body["unmatched_symbols"] = {"symbol": _one_or_many(unmatched)}
             return self._ok({"quotes": body})
+        options = self.held.get("options", {}).get(params.get("symbol", ""), {})
+        if parsed.path.endswith("/markets/options/expirations"):
+            dates = _one_or_many(list(options.get("expirations", [])))
+            return self._ok({"expirations": None if dates is None else {"date": dates}})
+        if parsed.path.endswith("/markets/options/chains"):
+            listed = _one_or_many(list(options.get("chains", {}).get(params.get("expiration"), [])))
+            return self._ok({"options": None if listed is None else {"option": listed}})
+        if parsed.path.endswith("/markets/calendar"):
+            return self._ok(
+                _calendar(int(params.get("year", "2026")), int(params.get("month", "1")))
+            )
         return Response(404, {"content-type": "text/plain"}, b"Not Found")
 
     @staticmethod
     def _ok(body: Any) -> Response:
         return Response(200, {"content-type": "application/json"}, dumps(body).encode())
+
+
+def _calendar(year: int, month: int) -> dict[str, Any]:
+    """A month's market days as `/markets/calendar` states them: every
+    weekday open, invented (no holiday is held)."""
+    import datetime as dt
+
+    day = dt.date(year, month, 1)
+    days = []
+    while day.month == month:
+        status = "open" if day.weekday() < 5 else "closed"
+        days.append({"date": day.isoformat(), "status": status})
+        day += dt.timedelta(days=1)
+    return {"calendar": {"month": str(month), "year": str(year), "days": {"day": days}}}
 
 
 #: The fields Tradier's stream sends as numbers; the rest of a time and
