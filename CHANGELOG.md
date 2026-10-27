@@ -8,6 +8,17 @@
   holiday calendar `daily` already declares. Their rows' closed days are
   known to the lake, and the analytics engine places a series whose quote
   names no venue by the dataset's declaration (core's ruling 767).
+- **An unchanged chain quote is not recorded again** (ruling 770). A
+  series' quote was sent whenever Tradier's quote time moved, each a new row
+  keyed by that time, though its bid, offer and sizes were the same: about
+  82,000 rows of one underlying's chain in two hours on a development
+  deployment, every one of which the lake's latest read then had to pass.
+  It is now sent only when its prices or sizes change, so an unchanged quote
+  keeps the row and row key it was first recorded under.
+- **The chain's datasets record their liveness** (contract v27, W10.4;
+  ruling 418): once a pass that read a chain, for the dataset's
+  consolidated view, so a reader still knows the quotes in force are
+  current when none changed.
 
 ## 0.13.1
 
