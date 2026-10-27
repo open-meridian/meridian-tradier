@@ -319,3 +319,60 @@ def test_a_standing_chains_quotes_are_judged_and_aged_at_the_edge(tmp_path: Path
     asyncio.run(lake.latency.report())
     (report,) = recorder.on("ReportLatency")
     assert {s.dataset for s in report.snapshots} == {f"{INSTANCE}:options"}
+
+
+def test_an_unchanged_quote_is_not_recorded_again_and_liveness_keeps_moving(
+    tmp_path: Path,
+) -> None:
+    """0.13.2 (ruling 770): a quote is sent when its prices or sizes change,
+    never for Tradier's quote time alone, so an unchanged quote keeps the row
+    (and row key) it was first recorded under; the chain dataset's liveness,
+    recorded once a pass that read a chain, says it is still current."""
+    held = copy.deepcopy(exchange())
+    listed = held["options"]["SPY"]["chains"]
+    recorder = Recorder(INSTANCE)
+    lake = lake_at(recorder, SATURDAY, tmp_path, held=held)
+    clock = lake.clock_ns
+
+    def alive() -> list[int]:
+        return [
+            item.alive_at_ns
+            for sent in recorder.on("RecordLiveness")
+            for item in sent.liveness
+            if item.dataset == f"{INSTANCE}:options" and not item.venue_id
+        ]
+
+    hear(recorder, lake, chain_want(SPY, standing=True))
+    first = rows(recorder, "RecordQuotes", "quotes")
+    assert len(first) == 6
+    assert alive() == [SATURDAY]
+
+    # A minute on, Tradier's quote times moved and nothing else: no new row.
+    for options in listed.values():
+        for option in options:
+            option["bid_date"] = str(int(option["bid_date"]) + 60_000)
+            option["ask_date"] = str(int(option["ask_date"]) + 60_000)
+    clock.now += 61 * 10**9
+    asyncio.run(lake.tick())
+    assert rows(recorder, "RecordQuotes", "quotes") == first
+    assert alive() == [SATURDAY, SATURDAY + 61 * 10**9]
+
+    # Another minute: one series' bid changed, recorded once, keyed by the
+    # time it changed; the others are not sent.
+    changed = listed["2026-10-16"][0]
+    changed["bid"] = "4.12"
+    changed["bid_date"] = str(int(changed["bid_date"]) + 30_000)
+    clock.now += 61 * 10**9
+    asyncio.run(lake.tick())
+    quotes = rows(recorder, "RecordQuotes", "quotes")
+    assert len(quotes) == 7
+    (new,) = quotes[6:]
+    assert new.meta.series_key[0].value == "SPY   261016C00575000"
+    assert new.meta.row_key == f"SPY   261016C00575000:q:{int(changed['bid_date']) * 10**6}"
+    assert new.meta.row_key not in {q.meta.row_key for q in first}
+    assert alive() == [SATURDAY, SATURDAY + 61 * 10**9, SATURDAY + 122 * 10**9]
+
+    # Within the minute nothing is read, and no liveness is recorded.
+    clock.now += 10 * 10**9
+    asyncio.run(lake.chains.refresh())
+    assert len(alive()) == 3

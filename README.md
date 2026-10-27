@@ -22,7 +22,7 @@ It is the second half of the retail pair, beside
 [meridian-alpaca](https://github.com/open-meridian/plugin-alpaca): both
 pass the same suites of the SDK, unchanged.
 
-**Status:** 0.13.1, on open-meridian 0.33.1 (contract 28): option chains
+**Status:** 0.13.2, on open-meridian 0.33.1 (contract 28): option chains
 in two datasets of their own, `options` and `options_delayed` (ruling 660),
 an underlying's series, quotes, open interest and volume under its record,
 keyed by OCC symbol and never minted; each live row's feed delay recorded

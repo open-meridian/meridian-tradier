@@ -50,6 +50,15 @@ calls a minute, the expirations a reader waits for first, then the longest
 unread, nearest expiration first; past that, a chain is read less often,
 never past Tradier's limit. Only what changed is sent again.
 
+**An unchanged quote is not recorded again** (0.13.2, ruling 770): a
+series' quote is sent when its bid, offer or either size changed, never for
+Tradier's quote time alone moving, so the lake keeps one row for each
+change -- under the row key of the time it changed, which an unchanged
+quote never moves -- and a busy underlying's chain is not a new row a
+series a minute. Freshness is the dataset's liveness instead (contract
+v27, W10.4; ruling 418): each pass that read a chain records it once, for
+the dataset's consolidated view, which confirms every quote in force.
+
 **The edge** (contract v28): a quote recorded for a standing want is judged
 by the SDK's quality checks and has its feed delay recorded (lake.py), each
 series judged apart, since the checks remember a subject's last row and
@@ -65,7 +74,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from meridian.errors import MeridianError
 from meridian.operations import Money, Quote, SourceTime
+from meridian.plugin.v1 import operations_pb2 as ops
 from meridian.roles import chains as helpers
 from meridian.roles.data.listings import Counts
 
@@ -142,6 +153,10 @@ class Chains:
         self.sent: OrderedDict[tuple[str, str, str], str] = OrderedDict()
         #: Chains read since start, and the series in the last.
         self.read_count = 0
+        #: When a chain was last read from Tradier, and the liveness last
+        #: recorded for it (0.13.2).
+        self.alive_ns = 0
+        self.liveness_ns = 0
 
     @property
     def counts(self) -> Counts:
@@ -297,7 +312,30 @@ class Chains:
             if wanted is not None:
                 await self.read(wanted, expiry)
                 read += 1
+        await self.alive()
         return read
+
+    async def alive(self) -> bool:
+        """The chain's sign of life since the last (0.13.2; contract v27,
+        W10.4, ruling 418): the chain dataset's liveness, recorded once a
+        pass for its consolidated view (no venue), which confirms every quote
+        in force, an unchanged one never sent again. Whether it was
+        recorded; a refusal is said, never raised."""
+        if self.alive_ns <= self.liveness_ns:
+            return False
+        self.liveness_ns = self.alive_ns
+        try:
+            await self.lake.plugin.record_liveness(
+                liveness=[
+                    ops.DatasetLiveness(
+                        dataset=self.dataset(), venue_id="", alive_at_ns=self.alive_ns
+                    )
+                ]
+            )
+        except (MeridianError, ValueError) as refused:
+            log.warning("the chain's liveness not recorded: %s", refused)
+            return False
+        return True
 
     async def read(self, held: Underlying, expiry: dt.date) -> None:
         """One expiration's chain read and recorded, against the want waiting
@@ -314,6 +352,7 @@ class Chains:
                 await self.decline(want_id, [held.subject], "source_silent", settled=False)
         else:
             self.read_count += 1
+            self.alive_ns = held.read_at[expiry]
             want_id = waiting[0] if waiting else min(held.standing, default="")
             await self.record(held, listed, want_id)
         self._forget(held)
@@ -404,8 +443,10 @@ class Chains:
             quote = self.quote(held.subject, option, key, dataset, raw)
             if quote is not None:
                 assert quote.meta is not None
+                # Its prices and sizes, never Tradier's quote time alone
+                # (ruling 770): unchanged, it is not recorded again.
                 said = repr((quote.bid, quote.ask, quote.bid_quantity, quote.ask_quantity))
-                if self._changed(QUOTE, dataset, option.osi, f"{option.at_ns}:{said}"):
+                if self._changed(QUOTE, dataset, option.osi, said):
                     quotes.append(quote)
             for kind, value in (("open_interest", option.open_interest), ("volume", option.volume)):
                 day = dates.get(kind)
