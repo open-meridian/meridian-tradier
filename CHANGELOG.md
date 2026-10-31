@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.3
+
+SDK 0.33.4: raw-record writes and enum conversion fixes (ruling 937).
+
+- **The pins:** open-meridian 0.33.1 to 0.33.4, and plugin-python:0.33.4 by tag
+  and digest (`meridian plugin migrate --to 0.33.4`: only the pins move).
+
 ## 0.13.2
 
 - **The option chains' datasets name their calendar** (ruling 768):
